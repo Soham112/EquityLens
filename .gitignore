@@ -1,0 +1,43 @@
+# Virtual Environment
+.venv/
+venv/
+env/
+ENV/
+__pycache__/
+*.py[cod]
+*$py.class
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Credentials & Secrets
+*.env
+.env.local
+.env.*.local
+secrets/
+credentials.json
+
+# Data Files (trading activity, caches, logs)
+data/
+logs/
+
+# Cache & Temporary
+*.cache
+.cache/
+*_cache.json
+*.tmp
+.pytest_cache/
+.coverage
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Project-specific (local testing, development)
+*.ipynb_checkpoints
+.claude/settings.local.json
