@@ -7,7 +7,7 @@ Paper portfolios are **fully automated** (entries + exits) on both tracks. Real 
 - Capital compounds: exit proceeds recycle into the pool; slot sizes grow after wins, shrink after losses
 - No fixed price targets, no time stops
 - Exits driven by: stop_loss | momentum_stall | thesis_break | trail_stop | earnings_proximity (decision prompt)
-- BigData MCP refresh: **Sunday only** — daily scans read from weekly cache
+- Sentiment cache refresh (yfinance + Haiku, no paid BigData): **Sunday only** — daily scans read from weekly cache
 
 ---
 
@@ -52,7 +52,8 @@ Hunter → Critic → Sentiment → Validator → Portfolio Manager + Scout + Jo
 core/
   data_layer.py          yfinance: price, ATR, RSI, MA50/200, volume, FCF, D/E
                          Also fetches: volume_avg_90d, short_float_pct
-  bigdata_client.py      Parse BigData.com MCP cache → internal types
+  bigdata_client.py      Parse sentiment cache → internal types (cache now written by
+                         yfinance_sentiment.py — BigData MCP replaced June 2026)
   staleness.py           GREEN/YELLOW/RED/BLACK data freshness
   regime_detector.py     3-signal market regime (SPY/VIX/drawdown) → BULL/NEUTRAL/BEARISH
   conviction.py          3-gate conviction formula with kill switch
@@ -224,7 +225,7 @@ task's prompt lives at `~/.claude/scheduled-tasks/{taskId}/SKILL.md`.
 |---|---|---|
 | equitylens-universe-refresh | Sunday 7 AM | Live-scrapes S&P 500 + Nasdaq 100, liquidity filter, rebuilds universe_cache.json |
 | equitylens-growth-universe-refresh | Sunday 7:30 AM | Validates the curated growth_universe.py list, sector radar, flags additions/removals |
-| equitylens-weekly-review | Sunday 8 AM | BigData MCP refresh → sector funnel → outcome review → SPY baseline → Monday briefing |
+| equitylens-weekly-review | Sunday 8 AM | Sentiment cache refresh (yfinance + Haiku) → sector funnel → outcome review → SPY baseline → Monday briefing |
 | equitylens-daily-scan | 9:35 AM Mon-Fri | Full pipeline incl. Growth Hunter (see workflows/daily_scan.py above) |
 | equitylens-decision-capture | 4:30 PM Mon-Fri | "Did you invest?" for each BUY signal |
 | equitylens-paper-report | 5 PM Mon-Fri | Evening P&L summary (workflows/paper_trade_report.py) |
@@ -234,16 +235,20 @@ see the Growth Hunter note in the Swing Pipeline section below.
 
 ---
 
-## BigData.com MCP
+## Sentiment Cache (formerly BigData.com MCP)
 
-Provides: news sentiment score, media attention, narrative summary, analyst ratings,
-revenue/EPS surprises, key events (lawsuits, product launches, executive changes).
+The paid BigData.com MCP subscription was **replaced June 2026** by
+`core/yfinance_sentiment.py` + `workflows/bigdata_refresh.py`:
+yfinance (headlines, analyst consensus/targets, EPS surprises, insider Form 4s)
+scored by Claude Haiku (~$0.03/week) → sentiment score, risk flags
+(litigation/SEC/auditor), narrative summary. Do NOT call BigData MCP tools.
 
-**Refresh schedule:** Sunday only (in equitylens-weekly-review task, Step 1).
-Daily scans read from `data/bigdata_cache/{ticker}.json` — no MCP at scan time.
-Cache format: `{ ticker, entity_id, fetched_at, company: {...}, sentiment: {...} }`
-Known entity IDs: NVDA=E09E2B (others resolved via find_securities)
-MCP tools: find_securities, bigdata_company_tearsheet, bigdata_sentiment_tearsheet
+**Refresh schedule:** Sunday only (equitylens-weekly-review task, Step 1 runs
+`workflows/bigdata_refresh.py`; check coverage with `--status`, refresh specific
+tickers by passing them as args). Daily scans read from
+`data/bigdata_cache/{ticker}.json` — no fetching at scan time.
+Same cache format as before (`source: "yfinance+haiku"`), so
+`bigdata_client.py` and all agents work unchanged.
 
 ---
 

@@ -35,7 +35,7 @@ Hunter → Critic → Sentiment → Validator → Portfolio Manager + Scout + Jo
 |---|---|---|
 | **Hunter** | Scores fundamental + technical + valuation strength (0-10) | Quantitative signal |
 | **Critic** | Red flags: litigation, SEC issues, auditor problems | Kill switches |
-| **Sentiment** | BigData.com sentiment + narrative momentum | ±1.5 conviction boost/penalty |
+| **Sentiment** | yfinance news headlines scored by Claude Haiku + narrative momentum | ±1.5 conviction boost/penalty |
 | **Validator** | Combines all agents → BUY / WATCHLIST / AVOID | Final signal |
 | **Portfolio Manager** | Conviction-weighted sizing, concentration limits, anti-whipsaw | Position recommendation |
 | **Scout** | Weekly sector funnel (momentum-ranked) | Universe sub-selection |
@@ -89,7 +89,7 @@ AVOID    → anything else (or conviction capped by macro/valuation gates)
 | Task | Time | What It Does |
 |---|---|---|
 | `equitylens-universe-refresh` | Sun 7 AM | Live scrape S&P500 + Nasdaq100, liquidity filter, rebuild universe cache |
-| `equitylens-weekly-review` | Sun 8 AM | BigData refresh, sector funnel, outcome review, SPY baseline |
+| `equitylens-weekly-review` | Sun 8 AM | Sentiment cache refresh (yfinance + Haiku), sector funnel, outcome review, SPY baseline |
 | `equitylens-daily-scan` | 9:35 AM (Mon-Fri) | Deep pipeline on 60-80 weekly universe stocks, swing scan on full 450, auto-exits, stop re-eval |
 | `equitylens-decision-capture` | 4:30 PM (Mon-Fri) | "Did you invest?" prompt for manual verification of BUY signals |
 | `equitylens-paper-report` | 5 PM (Mon-Fri) | Evening P&L summary |
@@ -114,7 +114,7 @@ data/
   swing_charts/{ticker}_{date}.png    Daily swing chart (120d OHLCV)
   swing_charts/{ticker}_LT_{date}.png Weekly LT chart (1y OHLCV)
   pnl_history_*.json                  Daily portfolio snapshots (P&L tracking)
-  bigdata_cache/{ticker}.json         BigData.com sentiment & news (refreshed Sunday)
+  bigdata_cache/{ticker}.json         Sentiment cache: yfinance news + Haiku scoring (refreshed Sunday)
   universe_cache.json                 Live S&P500 + Nasdaq100 constituents (7d TTL)
   ohlcv_cache_{date}.parquet          Batch OHLCV for prefilter (one yfinance call)
   weekly_universe_{date}.json         Sector funnel output (deep scan universe)
@@ -219,7 +219,7 @@ Valuation, macro, and mistake-pattern gates cap conviction (e.g., OVERVALUED →
 - **yfinance rate limits**: Never fetch per-ticker in a loop — use one batch `yf.download(list, ...)`. The parquet cache exists for this.
 - **yfinance `.calendar` format**: Returns a dict on current versions; earnings dates are `datetime.date` objects (no `.date()` method needed).
 - **Split risk**: Position stores raw shares/entry; unhandled splits read as crashes. Split guards check and adjust.
-- **BigData cache refresh**: Runs Sunday only. Daily scans read from cache files (`data/bigdata_cache/{ticker}.json`).
+- **Sentiment cache refresh**: Runs Sunday only via `workflows/bigdata_refresh.py` (yfinance + Claude Haiku, ~$0.03/week — the paid BigData.com MCP was replaced June 2026). Daily scans read from cache files (`data/bigdata_cache/{ticker}.json`).
 - **Dashboard restart**: After editing core/*.py, restart the dashboard (`pkill -f "uvicorn dashboard.app"`). Hard-refresh browser (Cmd+Shift+R).
 
 ---
