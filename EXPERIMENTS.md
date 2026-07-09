@@ -84,6 +84,33 @@ that's what keeps this log honest.
   reads ~August.
   - _Weekly updates go here (cohort sizes | avg 30/90d vs baseline | verdicts)_
 
+### E9 — Sector funnel backtest (Phase 1: validate on history before production)
+- **Date:** 2026-07-10
+- **Change:** none to production yet — `core/sector_backtest.py` replays the live
+  ranking formula (50% rel-return / 30% accel / 20% breadth, exact normalizations)
+  weekly over 2021-01 → 2026-07 (287 weeks, high fidelity — live funnel also scores
+  off ETF price/volume). Dashboard: "📊 5-Year Sector Backtest" button on Weekly
+  Review; API `/api/backtest/sectors` (`?refresh=true` recomputes).
+- **Why backtest, not forward-observe:** the funnel is pure math — mechanically
+  replayable. Doctrine (from user, 2026-07-10): backtest what is replayable;
+  forward-observe only what depends on live judgment (E7's chart vision).
+- **FINDINGS (282 scored weeks):**
+  - Top-3 avg forward-4w return +1.17% vs +1.11% for excluded sectors — **no
+    meaningful edge**; the funnel buys focus/cost-control, not alpha.
+  - Eventual best sector was in the top-3 only **36%** of weeks; a rank-4-6 sector
+    beat ALL three picks **47%** of weeks (the blind-spot rate).
+  - Cutoff: top-3 catches the best sector 36%, top-4 45%, top-5 51%.
+  - Weight grid: 'accel only' +1.56%/4w and 'equal thirds' +1.45%/4w both beat the
+    live mix (+1.15%) — hypothesis for recalibration, NOT a conclusion (single
+    window, in-sample fit).
+  - Rotation sim since 2021: formula top-3 1.98x vs SPY 2.19x vs equal-weight 2.06x.
+- **Status: OBSERVING → decision pending.** Evidence says the funnel's ranking adds
+  no alpha and hides the winner ~half the time. Candidate responses (each would be
+  its own experiment): widen deep-scan cutoff to top-4/5; reweight toward accel /
+  equal thirds (validate out-of-sample first); or keep as pure cost-control and
+  accept the blind spot knowingly. Phase 2 (Sunday full-ranking capture + forward
+  scoring as live regression check) not yet built.
+
 ## Settled experiments
 
 ### E4 — Valuation cap must demote the signal, not just the number (BUG FIX)

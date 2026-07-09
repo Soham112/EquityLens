@@ -797,6 +797,15 @@ async def feedback_mistakes():
     return {"mistakes": [asdict(m) for m in mistake_report()]}
 
 
+@app.get("/api/backtest/sectors")
+async def backtest_sectors(refresh: bool = Query(default=False)):
+    """E9 Phase 1: 5-year sector funnel backtest (cached; refresh=true recomputes)."""
+    import sys
+    sys.path.insert(0, str(Path(__file__).parent.parent))
+    from core.sector_backtest import load_or_run
+    return load_or_run(refresh=refresh)
+
+
 @app.get("/api/feedback/shadow")
 async def feedback_shadow():
     """E8 shadow tracking: gate-demoted signal cohorts vs entered BUYs (30/90d)."""

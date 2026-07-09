@@ -568,7 +568,15 @@
 
       <!-- ── Weekly Scan: Sector Funnel ── -->
       <div class="review-section" id="scan-funnel-section">
-        <h3>This Week's Sector Funnel</h3>
+        <h3 style="display:flex;align-items:center;gap:12px">This Week's Sector Funnel
+          <button onclick="toggleSectorBacktest()" style="font-size:11px;font-weight:600;border:1px solid #d1d5db;border-radius:4px;background:#fff;color:#374151;padding:4px 10px;cursor:pointer">
+            📊 5-Year Sector Backtest
+          </button>
+        </h3>
+        <!-- E9 Phase 1: sector funnel replayed over 2021-2026 -->
+        <div id="sector-backtest-panel" style="display:none;border:1px solid #e5e7eb;border-radius:8px;padding:16px 20px;margin-bottom:16px;background:#fff">
+          <div style="font-size:12px;color:#9ca3af">Loading backtest...</div>
+        </div>
         <div id="scan-funnel-container">
           <div class="empty" style="padding:16px 0">Loading sector funnel...</div>
         </div>
@@ -1544,6 +1552,148 @@
       html += '<div style="margin-top:10px;font-size:12px;color:#9ca3af">Verdicts appear once a cohort has 15+ signals scored at 90 days.</div>';
     }
     return html;
+  }
+
+  // ── Sector backtest panel (E9 Phase 1, Weekly Review tab) ──
+  let _sectorBtLoaded = false;
+  const SECTOR_COLORS = {
+    technology:'#2563eb', communication_services:'#7c3aed', financials:'#059669',
+    healthcare:'#dc2626', industrials:'#d97706', consumer_discretionary:'#db2777',
+    energy:'#92400e', utilities:'#6b7280', real_estate:'#0891b2', materials:'#65a30d',
+  };
+  const secLabel = s => s.replace(/_/g,' ');
+
+  async function toggleSectorBacktest() {
+    const panel = document.getElementById('sector-backtest-panel');
+    const showing = panel.style.display !== 'none';
+    panel.style.display = showing ? 'none' : 'block';
+    if (!showing && !_sectorBtLoaded) {
+      try {
+        const res = await fetch('/api/backtest/sectors');
+        const bt = await res.json();
+        panel.innerHTML = renderSectorBacktest(bt);
+        drawRotationCurves(bt.curves);
+        _sectorBtLoaded = true;
+      } catch (e) {
+        panel.innerHTML = '<div style="font-size:12px;color:#dc2626">Could not load backtest.</div>';
+      }
+    }
+  }
+
+  function renderSectorBacktest(bt) {
+    const pct = (v, dec=1) => v == null ? '—' : `<span style="color:${v >= 0 ? '#16a34a' : '#dc2626'}">${v >= 0 ? '+' : ''}${(v*100).toFixed(dec)}%</span>`;
+    let html = `<div style="font-size:13px;font-weight:700;color:#111">Sector Funnel Backtest — ${bt.window.start} → ${bt.window.end}</div>
+      <div style="font-size:12px;color:#9ca3af;margin:2px 0 14px">${bt.window.weeks} weekly replays of the live ranking formula (50% rel. return / 30% momentum accel / 20% volume breadth) · SPY total: ${pct(bt.spy_total_return,0)}</div>`;
+
+    // Verdicts
+    (bt.verdicts || []).forEach(v => {
+      const bad = /costing money|blind-spot|No meaningful edge/i.test(v);
+      const warn = /candidate for recalibration/i.test(v);
+      const bg = bad ? '#fef2f2' : warn ? '#fffbeb' : '#f0fdf4';
+      const col = bad ? '#dc2626' : warn ? '#92400e' : '#166534';
+      html += `<div style="font-size:12.5px;border-radius:4px;padding:8px 12px;margin-bottom:6px;background:${bg};color:${col}">${bad ? '⚠' : warn ? '△' : '✓'} ${v}</div>`;
+    });
+
+    // Rotation curves
+    html += `<div style="margin:18px 0 6px;font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#6b7280">If we had traded the formula — $1 invested, weekly rebalance</div>
+      <div style="display:flex;gap:14px;font-size:11px;color:#6b7280;margin-bottom:6px">
+        <span><span style="color:#2563eb">■</span> Formula top-3</span>
+        <span><span style="color:#9ca3af">■</span> SPY</span>
+        <span><span style="color:#d97706">■</span> Equal-weight all 10</span>
+      </div>
+      <canvas id="bt-rotation-chart" style="width:100%;height:170px"></canvas>`;
+
+    // Regime cards
+    html += '<div style="margin:18px 0 8px;font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#6b7280">Market Regimes — what led, what the funnel did</div>';
+    html += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:10px">';
+    (bt.regimes || []).forEach(r => {
+      const f = r.funnel || {};
+      html += `<div style="border:1px solid #e5e7eb;border-radius:6px;padding:12px 14px">
+        <div style="display:flex;justify-content:space-between;align-items:baseline">
+          <span style="font-size:13px;font-weight:700">${r.name}</span>
+          <span style="font-size:12px">SPY ${pct(r.spy_return,0)}</span>
+        </div>
+        <div style="font-size:11px;color:#9ca3af;margin-bottom:8px">${r.start} → ${r.end}</div>
+        <div style="font-size:12px;margin-bottom:2px">Led: ${r.best_sectors.map(s => `<span style="color:${SECTOR_COLORS[s]};font-weight:600">${secLabel(s)}</span> ${pct(r.sector_returns[s],0)}`).join(' · ')}</div>
+        <div style="font-size:12px;margin-bottom:8px">Lagged: ${r.worst_sectors.map(s => `${secLabel(s)} ${pct(r.sector_returns[s],0)}`).join(' · ')}</div>
+        ${f.weeks ? `<div style="font-size:11px;color:#6b7280;border-top:1px solid #f3f4f6;padding-top:6px">Funnel: caught best sector ${(f.best_in_top3_pct*100).toFixed(0)}% · blind-spot ${(f.rank456_beat_all_top3_pct*100).toFixed(0)}% · picked mostly ${r.most_picked.map(secLabel).join(', ')}</div>` : ''}
+      </div>`;
+    });
+    html += '</div>';
+
+    // Weekly leadership strip
+    if (bt.leadership && bt.leadership.length) {
+      html += '<div style="margin:18px 0 6px;font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#6b7280">#1-ranked sector, week by week</div>';
+      html += '<div style="display:flex;height:18px;border-radius:3px;overflow:hidden">';
+      bt.leadership.forEach(l => {
+        html += `<div title="${l.date}: ${secLabel(l.top1)}" style="flex:1;background:${SECTOR_COLORS[l.top1] || '#e5e7eb'}"></div>`;
+      });
+      html += '</div>';
+      html += '<div style="display:flex;flex-wrap:wrap;gap:10px;font-size:11px;color:#6b7280;margin-top:6px">' +
+        Object.keys(SECTOR_COLORS).map(s => `<span><span style="color:${SECTOR_COLORS[s]}">■</span> ${secLabel(s)}</span>`).join('') + '</div>';
+    }
+
+    // Sector 5y returns bars
+    html += '<div style="margin:18px 0 8px;font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#6b7280">Sector total returns over the window · weeks spent in funnel top-3</div>';
+    const maxRet = Math.max(...bt.sector_summary.map(s => Math.abs(s.total_return)), 0.01);
+    bt.sector_summary.forEach(s => {
+      const w = Math.abs(s.total_return) / maxRet * 100;
+      const col = s.total_return >= 0 ? '#16a34a' : '#dc2626';
+      html += `<div style="display:flex;align-items:center;gap:10px;padding:4px 0;font-size:12.5px">
+        <span style="width:180px;color:${SECTOR_COLORS[s.sector]};font-weight:600">${secLabel(s.sector)}</span>
+        <div style="flex:1;background:#f3f4f6;border-radius:3px;height:8px"><div style="width:${w.toFixed(1)}%;background:${col};height:8px;border-radius:3px"></div></div>
+        <span style="width:60px;text-align:right;font-weight:700">${pct(s.total_return,0)}</span>
+        <span style="width:110px;color:#9ca3af;font-size:11px;text-align:right">${s.weeks_in_top3} wks top-3 · ${s.weeks_rank1} at #1</span>
+      </div>`;
+    });
+
+    // Cutoffs + weight grid
+    html += `<div style="margin:18px 0 8px;font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#6b7280">Would a different formula have ranked better? (avg 4-week return of its top-3)</div>`;
+    const maxW = Math.max(...bt.weights.map(w => w.avg_top3_fwd4w || 0), 0.001);
+    bt.weights.forEach(w => {
+      const isLive = w.name.startsWith('live');
+      html += `<div style="display:flex;align-items:center;gap:10px;padding:4px 0;font-size:12.5px${isLive ? ';background:#f9fafb;font-weight:600' : ''}">
+        <span style="width:180px">${w.name}${isLive ? ' ←' : ''}</span>
+        <div style="flex:1;background:#f3f4f6;border-radius:3px;height:8px"><div style="width:${((w.avg_top3_fwd4w||0)/maxW*100).toFixed(1)}%;background:${isLive ? '#2563eb' : '#9ca3af'};height:8px;border-radius:3px"></div></div>
+        <span style="width:60px;text-align:right;font-weight:700">${pct(w.avg_top3_fwd4w,2)}</span>
+      </div>`;
+    });
+    html += `<div style="font-size:11px;color:#9ca3af;margin-top:8px">Cutoff capture of the eventual best sector: top-3 ${(bt.cutoffs.top3*100).toFixed(0)}% · top-4 ${(bt.cutoffs.top4*100).toFixed(0)}% · top-5 ${(bt.cutoffs.top5*100).toFixed(0)}%. Weight-grid results are historical fits — treat the winner as a hypothesis for E10, not a conclusion.</div>`;
+    return html;
+  }
+
+  function drawRotationCurves(curves) {
+    const canvas = document.getElementById('bt-rotation-chart');
+    if (!canvas || !curves || !curves.formula_top3 || curves.formula_top3.length < 2) return;
+    const ctx = canvas.getContext('2d');
+    const W = canvas.offsetWidth || 800, H = 170;
+    canvas.width = W; canvas.height = H;
+    const series = [
+      { data: curves.formula_top3, color: '#2563eb' },
+      { data: curves.spy, color: '#9ca3af' },
+      { data: curves.equal_weight, color: '#d97706' },
+    ];
+    const all = series.flatMap(s => s.data);
+    const minV = Math.min(...all) * 0.98, maxV = Math.max(...all) * 1.02;
+    const n = curves.formula_top3.length;
+    const x = i => (i / (n - 1)) * (W - 46) + 4;
+    const y = v => H - 18 - ((v - minV) / (maxV - minV)) * (H - 28);
+    // gridlines + labels
+    ctx.font = '10px sans-serif'; ctx.fillStyle = '#9ca3af'; ctx.strokeStyle = '#f3f4f6';
+    [minV, (minV+maxV)/2, maxV].forEach(v => {
+      ctx.beginPath(); ctx.moveTo(4, y(v)); ctx.lineTo(W - 42, y(v)); ctx.stroke();
+      ctx.fillText(v.toFixed(2) + 'x', W - 38, y(v) + 3);
+    });
+    (curves.dates || []).forEach((d, i) => {
+      if (d.endsWith('-01-02') || d.endsWith('-01-03') || (i > 0 && d.slice(0,4) !== curves.dates[i-1].slice(0,4))) {
+        ctx.fillText(d.slice(0,4), x(i), H - 4);
+      }
+    });
+    series.forEach(s => {
+      ctx.beginPath(); ctx.strokeStyle = s.color; ctx.lineWidth = 1.6;
+      s.data.forEach((v, i) => i ? ctx.lineTo(x(i), y(v)) : ctx.moveTo(x(i), y(v)));
+      ctx.stroke();
+    });
   }
 
   // ── Capital allocation bar (shared across swing/portfolio tabs) ──
