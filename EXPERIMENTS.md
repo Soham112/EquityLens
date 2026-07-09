@@ -166,6 +166,40 @@ that's what keeps this log honest.
 - **Status: OBSERVING** — first probe queued for Sunday 2026-07-12:
   materials → metals_mining → FCX, NEM, GOLD, AA, CLF, MP.
 
+### E11 — Swing strategy layer backtests (screener + exit engine, 2022-2026)
+- **Date:** 2026-07-09 — `core/strategy_backtest.py`, results in data/strategy_backtest.json.
+  ~50k weekly prefilter-passing snapshots; 4,000 sampled candidate entries × 7 exit
+  variants × 63d daily-close simulation. Honesty notes: only the 3 OHLCV-replayable
+  signals (volume/RS/structure); today's constituents (mild survivorship); overlapping
+  entries grade rule quality, not equity. LT deliberately NOT backtested (no
+  point-in-time fundamentals — would be look-ahead theater; E8 shadow is the honest tool).
+- **Part A findings (screener layer):** signal-count cohorts are essentially FLAT at
+  21d fwd (0 signals +0.88%, 1 +0.77%, 2 +1.02%, 3 +0.94%; win rates all ~53%).
+  The prefilter does the heavy lifting; the price signals add little ranking power.
+  Per-signal: price_structure has the only real edge (+1.02% fired vs +0.80% quiet,
+  n=18k); relative_strength ≈ nothing; **volume_accumulation slightly ANTI-predictive**
+  (+0.74% fired vs +0.90% quiet) — watch its live screen stats for a KILL.
+  Implication for E7: signal-count thresholds matter less than assumed → loosening
+  4→3 unlikely to hurt via count alone; the alpha burden sits on chart vision +
+  gates → raises the value of the sampled vision backtest (user approved ~$5 ≈
+  350-400 charts; not yet run).
+- **Part B findings (exit engine — the levers matter enormously; variant spread
+  0.64%-1.56% avg/trade, win 37-53%):**
+  - Live config: +1.07% avg, 49% win, 17.6d hold. Middle of the pack.
+  - **Stall exit is the biggest lever**: it ends 63% of trades. Removing it → +1.56%
+    avg (best) but 37% win, −4.95% median, 38d holds — stall trades expectancy for
+    smoothness and capital turnover. Debatable, not obviously wrong.
+  - **"S1 only" (drop the 2.5×ATR floor) beat live on every central metric**:
+    +1.38% avg, +0.42% median, 53% win — wider structural stops stop-hunt less
+    (743 stop-outs vs live's 1291). Worst trade −41% vs −36%, but live sizing
+    caps $ risk via stop distance, so wider stop = smaller position anyway.
+  - Tighter floor (2.0×ATR) worse; earlier trail worse (cuts winners); 21d time
+    stop much worse (+0.64%) — swing winners need more than 21 days.
+- **Status: OBSERVING → candidate change identified, NOT applied.** Before any
+  production change: re-run Part B split by era (2022-23 vs 2024-26) to check the
+  S1-only and no-stall findings are stable, then decide as its own experiment.
+  Production exits unchanged today.
+
 ## Settled experiments
 
 ### E4 — Valuation cap must demote the signal, not just the number (BUG FIX)
