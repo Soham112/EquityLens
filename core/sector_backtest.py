@@ -68,25 +68,27 @@ def _composite(vs_spy_60d: float, accel: float, breadth: float,
     return ret_score * w_ret + accel_score * w_accel + breadth_score * w_breadth
 
 
-def _build_weekly():
+def _build_weekly(start: str = START, first_signal: str = FIRST_SIGNAL,
+                  sector_etfs: Optional[dict] = None):
     """Shared replay: weekly feature/ranking/forward-return records + close df.
-    Used by run_backtest() and walk_forward()."""
+    Used by run_backtest(), walk_forward() and long_history_validation()."""
     import pandas as pd
     import yfinance as yf
 
-    tickers = list(SECTOR_ETFS.values()) + ["SPY"]
-    logger.info(f"[SectorBT] downloading {len(tickers)} ETFs from {START}...")
-    raw = yf.download(tickers, start=START, progress=False,
+    SECTOR_ETFS_ = sector_etfs or SECTOR_ETFS
+    tickers = list(SECTOR_ETFS_.values()) + ["SPY"]
+    logger.info(f"[SectorBT] downloading {len(tickers)} ETFs from {start}...")
+    raw = yf.download(tickers, start=start, progress=False,
                       auto_adjust=True, group_by="ticker")
     close = pd.DataFrame({t: raw[t]["Close"] for t in tickers}).dropna(how="all")
     volume = pd.DataFrame({t: raw[t]["Volume"] for t in tickers})
-    sectors = list(SECTOR_ETFS.keys())
+    sectors = list(SECTOR_ETFS_.keys())
 
     # Weekly signal dates: last trading day of each ISO week, with enough
     # history for the 90d volume window and at least 5 forward days
     idx = close.index
     week_last = close.groupby([idx.isocalendar().year, idx.isocalendar().week]).tail(1).index
-    first_ts = pd.Timestamp(FIRST_SIGNAL)
+    first_ts = pd.Timestamp(first_signal)
 
     def ret(t, i, days):
         if i - days < 0 or pd.isna(close[t].iloc[i - days]) or pd.isna(close[t].iloc[i]):
@@ -110,7 +112,7 @@ def _build_weekly():
         feats, scores = {}, {}
         ok = True
         for s in sectors:
-            etf = SECTOR_ETFS[s]
+            etf = SECTOR_ETFS_[s]
             r20, r60 = ret(etf, i, 20), ret(etf, i, 60)
             if r20 is None or r60 is None:
                 ok = False
@@ -127,9 +129,9 @@ def _build_weekly():
             "ranking": ranking,
             "scores": scores,
             "features": {s: [round(x, 4) for x in feats[s]] for s in sectors},
-            "fwd_1w": {s: fwd(SECTOR_ETFS[s], i, 5) for s in sectors},
-            "fwd_4w": {s: fwd(SECTOR_ETFS[s], i, 21) for s in sectors},
-            "fwd_12w": {s: fwd(SECTOR_ETFS[s], i, 63) for s in sectors},
+            "fwd_1w": {s: fwd(SECTOR_ETFS_[s], i, 5) for s in sectors},
+            "fwd_4w": {s: fwd(SECTOR_ETFS_[s], i, 21) for s in sectors},
+            "fwd_12w": {s: fwd(SECTOR_ETFS_[s], i, 63) for s in sectors},
             "spy_fwd_1w": fwd("SPY", i, 5),
         }
         weekly.append(rec)
@@ -496,3 +498,53 @@ def _save_ranking_log(entries: list) -> None:
     with open(RANKING_LOG, "w") as f:
         for e in entries:
             f.write(json.dumps(e) + "\n")
+
+
+# ── Long-history bias check (1999-2026, 8 sectors) ────────────────────────────
+# XLC (2018) and XLRE (2015) are too young; the other 8 SPDRs trade since
+# Dec 1998. Top-4 of 8 keeps the same half-the-universe proportion as top-5
+# of 10. Pre-registered rule (set 2026-07-09, before running): equal thirds
+# keeps its win only if it (a) beats live 50/30/20 in a majority of years
+# 2000-2026, (b) has positive avg margin, and (c) is not materially worse
+# (>0.10%/4w) in the crisis years (2000-02, 2008, 2020, 2022).
+
+ETFS_1999 = {k: v for k, v in SECTOR_ETFS.items()
+             if k not in ("communication_services", "real_estate")}
+CRISIS_YEARS = {"2000", "2001", "2002", "2008", "2020", "2022"}
+
+
+def long_history_validation(top_k: int = 4) -> dict:
+    weekly, close, sectors = _build_weekly(
+        start="1999-01-01", first_signal="2000-01-01", sector_etfs=ETFS_1999)
+    scored = [w for w in weekly if all(v is not None for v in w["fwd_4w"].values())]
+
+    def basket_ret(w, wr, wa, wb):
+        sc = {s: _composite(*w["features"][s], wr, wa, wb) for s in sectors}
+        top = sorted(sectors, key=lambda s: -sc[s])[:top_k]
+        return sum(w["fwd_4w"][s] for s in top) / top_k
+
+    years = sorted({w["date"][:4] for w in scored})
+    by_year = {y: [w for w in scored if w["date"][:4] == y] for y in years}
+    table = {}
+    for name, wr, wa, wb in WEIGHT_GRID:
+        table[name] = {y: round(sum(basket_ret(w, wr, wa, wb) for w in by_year[y]) / len(by_year[y]), 4)
+                       for y in years}
+
+    live = table["live 50/30/20"]
+    report = {"years": years, "weeks_scored": len(scored), "per_year_table": table, "summary": {}}
+    for name in table:
+        if name == "live 50/30/20":
+            continue
+        wins = [y for y in years if table[name][y] > live[y]]
+        margin = sum(table[name][y] - live[y] for y in years) / len(years)
+        crisis = [y for y in years if y in CRISIS_YEARS]
+        crisis_margin = (sum(table[name][y] - live[y] for y in crisis) / len(crisis)) if crisis else None
+        report["summary"][name] = {
+            "years_beating_live": f"{len(wins)}/{len(years)}",
+            "win_rate": round(len(wins) / len(years), 3),
+            "avg_margin_4w": round(margin, 4),
+            "crisis_avg_margin_4w": round(crisis_margin, 4) if crisis_margin is not None else None,
+            "passes_prereg": (len(wins) / len(years) > 0.5 and margin > 0
+                              and (crisis_margin is None or crisis_margin > -0.0010)),
+        }
+    return report

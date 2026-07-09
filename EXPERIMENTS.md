@@ -124,8 +124,29 @@ that's what keeps this log honest.
   (live and equal-thirds already disagree on the top-5). Review the race in the
   Sunday task; revisit the weight decision when ~12+ live weeks are scored
   (~October 2026) — same evidence bar as the shadow cohorts.
-- **Status: OBSERVING (Phase 2 live race running; top-5 settled → WORKED pending
-  first weeks of wider-universe scans).**
+- **Long-history bias check (2026-07-09, user-requested: "was there any bias that
+  led equal thirds to a win?"):** `long_history_validation()` — same replay over
+  1999-2026 (8 sectors, XLC/XLRE too young; top-4 of 8 = same proportion;
+  1,379 weeks, 27 years; pre-registered: majority of years + positive margin +
+  not materially worse in crisis years 2000-02/2008/2020/2022).
+  - **Equal thirds FAILED**: 13/27 years (48%), +0.06%/4w, crisis −0.04%. Its
+    4/4 walk-forward win was a 2021-26 regime artifact — user's bias suspicion
+    vindicated. NOT a production candidate.
+  - **Accel-only PASSED — the only one**: 19/27 years (70%), +0.21%/4w, and the
+    BEST crisis record (+0.17%): dot-com bust −0.40% vs live −0.92%, GFC +0.35%
+    vs −0.26%. Corrects the earlier "fragile in bears" call, which was itself
+    small-sample bias from 2022 alone; its real weakness is V-shaped whipsaws
+    (2020, 2022).
+  - 40/40/20 failed on crisis margin (−0.11%). Lesson for the log: the two
+    validation windows crowned DIFFERENT winners — exactly why nothing ships
+    without the live race.
+- **Accel radar (built 2026-07-09, user idea):** weekly_scan now flags sectors in
+  accel-only's top-3 that the production formula left out of its top-5
+  (`accel_radar` in weekly universe + ⚡ callout on the funnel dashboard) —
+  "about to turn" watch list, attention only, never entries. First preview:
+  materials.
+- **Status: OBSERVING (Phase 2 live race running — now refereeing live 50/30/20
+  vs accel-only as the surviving challenger; top-5 cutoff settled).**
 
 ## Settled experiments
 

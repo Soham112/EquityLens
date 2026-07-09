@@ -67,7 +67,23 @@ def run_weekly_scan() -> dict:
     # Combine candidate stocks + wildcards (deduped)
     all_stocks = list(dict.fromkeys(universe.candidate_stocks + universe.wildcard_stocks))
 
+    # E9 accel radar: sectors the accel-only formula ranks top-3 that the
+    # production formula left OUT of its top-5 — "about to turn" candidates to
+    # watch. Attention only, never entries: accel-only passed the 27-year
+    # long-history check (19/27 years, +0.17%/4w in crisis years) but stays
+    # shadow until the live race graduates it.
+    accel_radar: list[str] = []
+    try:
+        from core.sector_backtest import log_weekly_ranking, _load_ranking_log
+        entry = log_weekly_ranking() or (_load_ranking_log() or [None])[-1]
+        if entry:
+            accel_radar = [s for s in entry["rankings"]["accel only"][:3]
+                           if s not in universe.top_macro_sectors]
+    except Exception as e:
+        logger.warning(f"[E9] accel radar failed: {e}")
+
     output = {
+        "accel_radar": accel_radar,
         "date": today,
         "top_macro_sectors": universe.top_macro_sectors,
         "top_microsectors": universe.top_microsectors,
@@ -89,8 +105,7 @@ def run_weekly_scan() -> dict:
     # shadow race that decides whether the weight change (equal thirds etc.)
     # graduates from backtest to production.
     try:
-        from core.sector_backtest import log_weekly_ranking, score_ranking_log
-        log_weekly_ranking()
+        from core.sector_backtest import score_ranking_log
         summary = score_ranking_log()
         if summary.get("weeks_scored"):
             logger.info(f"[E9-Phase2] Live formula race after {summary['weeks_scored']} scored weeks: "
@@ -121,7 +136,10 @@ def _print_summary(output: dict):
         score = s["composite_score"]
         print(f"  {rank:<10} {name:<26} {score:>6.1f} {r20:>7} {r60:>7} {vspy:>8}")
 
-    print(f"\nTOP 3 MACRO: {', '.join(output['top_macro_sectors']).upper()}")
+    print(f"\nTOP MACRO: {', '.join(output['top_macro_sectors']).upper()}")
+    if output.get("accel_radar"):
+        print(f"⚡ ACCEL RADAR (accelerating, outside our top-5 — watch, don't chase): "
+              f"{', '.join(output['accel_radar']).upper()}")
 
     micro_scores = output["sector_scores"].get("micro", {})
     for macro in output["top_macro_sectors"]:
