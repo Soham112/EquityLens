@@ -59,7 +59,10 @@ def run_weekly_scan() -> dict:
     _refresh_bigdata_cache(all_tickers)
 
     # Step 2: Run sector funnel
-    universe = run_weekly_funnel(top_n_macro=3, top_n_micro=3)
+    # E9 decision 2026-07-10: top-5 macro sectors (was top-3). Backtest evidence:
+    # top-3 caught the eventual best sector only 36% of weeks, top-5 catches 51%.
+    # Deep-scan universe grows ~60→~100 stocks — the price of that blind spot.
+    universe = run_weekly_funnel(top_n_macro=5, top_n_micro=3)
 
     # Combine candidate stocks + wildcards (deduped)
     all_stocks = list(dict.fromkeys(universe.candidate_stocks + universe.wildcard_stocks))
@@ -80,6 +83,20 @@ def run_weekly_scan() -> dict:
     with open(path, "w") as f:
         json.dump(output, f, indent=2)
     logger.info(f"Weekly universe saved → {path}")
+
+    # E9 Phase 2: log this week's full ranking under the live weights AND every
+    # challenger formula, and score past weeks' forward returns. This is the live
+    # shadow race that decides whether the weight change (equal thirds etc.)
+    # graduates from backtest to production.
+    try:
+        from core.sector_backtest import log_weekly_ranking, score_ranking_log
+        log_weekly_ranking()
+        summary = score_ranking_log()
+        if summary.get("weeks_scored"):
+            logger.info(f"[E9-Phase2] Live formula race after {summary['weeks_scored']} scored weeks: "
+                        + ", ".join(f"{k}={v:+.2%}" for k, v in summary["avg_fwd4w_by_formula"].items()))
+    except Exception as e:
+        logger.warning(f"[E9-Phase2] ranking log failed: {e}")
 
     _print_summary(output)
     return output

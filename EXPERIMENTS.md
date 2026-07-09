@@ -104,12 +104,28 @@ that's what keeps this log honest.
     live mix (+1.15%) — hypothesis for recalibration, NOT a conclusion (single
     window, in-sample fit).
   - Rotation sim since 2021: formula top-3 1.98x vs SPY 2.19x vs equal-weight 2.06x.
-- **Status: OBSERVING → decision pending.** Evidence says the funnel's ranking adds
-  no alpha and hides the winner ~half the time. Candidate responses (each would be
-  its own experiment): widen deep-scan cutoff to top-4/5; reweight toward accel /
-  equal thirds (validate out-of-sample first); or keep as pure cost-control and
-  accept the blind spot knowingly. Phase 2 (Sunday full-ranking capture + forward
-  scoring as live regression check) not yet built.
+- **Out-of-sample validation (2026-07-10, `walk_forward()`, top-5 baskets,
+  pre-registered rule: beat live in ≥3/4 test years by ≥0.10%/4w):**
+  - Survivors: 40/40/20 (3/4, +0.32%/4w), accel-only (3/4, +0.27%), equal thirds
+    (**4/4**, +0.26%). Failed: return-only, 70/30/0, 60/20/20 (0-1/4).
+  - Robust directional finding: every survivor shifts weight FROM relative return
+    TOWARD momentum acceleration. Accel-only had the worst 2022 bear (−0.53% vs
+    live −0.23%) — single-factor fragility; ruled out.
+  - Walk-forward selection (+1.57%) barely beat always-live (+1.48%) — no magic
+    in chasing the recent best formula.
+- **DECISION (user, 2026-07-10):** top-5 cutoff → PRODUCTION (weekly_scan now runs
+  `top_n_macro=5`; deep-scan universe ~60→~100 stocks). Weight formula stays
+  50/30/20 — a challenger graduates only after the LIVE formula race confirms the
+  backtest ("backtest first, actual results, then change production").
+- **Phase 2 BUILT (the live race):** every Sunday `log_weekly_ranking()` logs the
+  full 10-sector ranking under live weights AND every challenger
+  (data/sector_ranking_log.jsonl); `score_ranking_log()` fills 4-week forward
+  returns and reports avg top-5 basket return per formula. First entry 2026-07-09
+  (live and equal-thirds already disagree on the top-5). Review the race in the
+  Sunday task; revisit the weight decision when ~12+ live weeks are scored
+  (~October 2026) — same evidence bar as the shadow cohorts.
+- **Status: OBSERVING (Phase 2 live race running; top-5 settled → WORKED pending
+  first weeks of wider-universe scans).**
 
 ## Settled experiments
 

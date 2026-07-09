@@ -25,6 +25,7 @@ import datetime
 import json
 import logging
 import os
+from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -382,3 +383,113 @@ def walk_forward(top_k: int = 5) -> dict:
                          "live_avg": round(sum(live_ret) / len(live_ret), 4)},
         "verdicts": sorted(verdicts, key=lambda v: -v["avg_margin_4w"]),
     }
+
+
+# ── E9 Phase 2: live formula race ─────────────────────────────────────────────
+# Every Sunday, log the full sector ranking under the LIVE weights and every
+# challenger in WEIGHT_GRID; later, score each week's top-5 basket forward 4w
+# return. This is the out-of-sample-forever test: the weight change graduates
+# to production only when the live race confirms the backtest.
+
+RANKING_LOG = "data/sector_ranking_log.jsonl"
+
+
+def log_weekly_ranking() -> Optional[dict]:
+    """Compute today's features from ETF data and log rankings for all formulas."""
+    import pandas as pd
+    import yfinance as yf
+
+    today = datetime.date.today().isoformat()
+    entries = _load_ranking_log()
+    if any(e["date"] == today for e in entries):
+        logger.info("[E9-Phase2] ranking already logged today")
+        return None
+
+    tickers = list(SECTOR_ETFS.values()) + ["SPY"]
+    raw = yf.download(tickers, period="7mo", progress=False,
+                      auto_adjust=True, group_by="ticker")
+    close = pd.DataFrame({t: raw[t]["Close"] for t in tickers}).dropna(how="all")
+    volume = pd.DataFrame({t: raw[t]["Volume"] for t in tickers})
+    if len(close) < 91:
+        logger.warning("[E9-Phase2] not enough history to log ranking")
+        return None
+
+    i = len(close) - 1
+    spy60 = float(close["SPY"].iloc[i] / close["SPY"].iloc[i - 60] - 1)
+    feats = {}
+    for s, etf in SECTOR_ETFS.items():
+        r20 = float(close[etf].iloc[i] / close[etf].iloc[i - 20] - 1)
+        r60 = float(close[etf].iloc[i] / close[etf].iloc[i - 60] - 1)
+        v20 = float(volume[etf].iloc[i - 19: i + 1].mean())
+        v90 = float(volume[etf].iloc[i - 89: i + 1].mean())
+        feats[s] = (r60 - spy60, r20 - r60, (v20 / v90) if v90 else 1.0)
+
+    entry = {
+        "date": today,
+        "prices": {s: round(float(close[SECTOR_ETFS[s]].iloc[i]), 4) for s in SECTOR_ETFS},
+        "features": {s: [round(x, 4) for x in feats[s]] for s in SECTOR_ETFS},
+        "rankings": {}, "fwd_4w": None,
+    }
+    for name, wr, wa, wb in WEIGHT_GRID:
+        sc = {s: _composite(*feats[s], wr, wa, wb) for s in SECTOR_ETFS}
+        entry["rankings"][name] = sorted(SECTOR_ETFS, key=lambda s: -sc[s])
+
+    entries.append(entry)
+    _save_ranking_log(entries)
+    logger.info(f"[E9-Phase2] logged weekly ranking ({len(entries)} total)")
+    return entry
+
+
+def score_ranking_log() -> dict:
+    """Fill 4-week forward returns on past entries; summarize the formula race."""
+    import pandas as pd
+    import yfinance as yf
+
+    entries = _load_ranking_log()
+    pending = [e for e in entries if e.get("fwd_4w") is None
+               and (datetime.date.today() - datetime.date.fromisoformat(e["date"])).days >= 30]
+    if pending:
+        raw = yf.download(list(SECTOR_ETFS.values()), start=min(e["date"] for e in pending),
+                          progress=False, auto_adjust=True, group_by="ticker")
+        for e in pending:
+            try:
+                fwd = {}
+                for s, etf in SECTOR_ETFS.items():
+                    closes = raw[etf]["Close"].dropna()
+                    after = closes[closes.index.date > datetime.date.fromisoformat(e["date"])]
+                    if len(after) < 21:
+                        fwd = None
+                        break
+                    fwd[s] = round(float(after.iloc[20] / e["prices"][s] - 1), 4)
+                if fwd:
+                    e["fwd_4w"] = fwd
+            except Exception as ex:
+                logger.warning(f"[E9-Phase2] scoring {e['date']} failed: {ex}")
+        _save_ranking_log(entries)
+
+    scored = [e for e in entries if e.get("fwd_4w")]
+    summary = {"weeks_logged": len(entries), "weeks_scored": len(scored),
+               "avg_fwd4w_by_formula": {}}
+    if scored:
+        for name, *_ in WEIGHT_GRID:
+            rets = [sum(e["fwd_4w"][s] for s in e["rankings"][name][:5]) / 5 for e in scored]
+            summary["avg_fwd4w_by_formula"][name] = round(sum(rets) / len(rets), 4)
+    return summary
+
+
+def _load_ranking_log() -> list:
+    if not os.path.exists(RANKING_LOG):
+        return []
+    out = []
+    with open(RANKING_LOG) as f:
+        for line in f:
+            if line.strip():
+                out.append(json.loads(line))
+    return out
+
+
+def _save_ranking_log(entries: list) -> None:
+    os.makedirs("data", exist_ok=True)
+    with open(RANKING_LOG, "w") as f:
+        for e in entries:
+            f.write(json.dumps(e) + "\n")

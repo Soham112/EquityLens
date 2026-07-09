@@ -217,7 +217,10 @@ as a separate entry point.
 
 10 macro sectors → 24 microsectors + 14 wildcards. Used by the weekly funnel (scout.py).
 Sector scoring vs SPY: composite = 50% relative_return_60d + 30% momentum_accel + 20% volume_breadth
-→ LEADING/MIDDLE/LAGGING → top 3 macro → microsectors → ~60 weekly candidates.
+→ LEADING/MIDDLE/LAGGING → top 5 macro (was 3 — E9 backtest decision 2026-07-10) → microsectors
+→ ~100 weekly candidates. Weight formula unchanged pending the E9 Phase 2 live race:
+weekly_scan logs all-formula rankings to data/sector_ranking_log.jsonl and scores them
+forward — see EXPERIMENTS.md E9 before touching the composite weights.
 Note: the weekly funnel constrains the DEEP scan only; the swing scan always runs on the full universe.
 
 **Wildcard pool:** COST, TSLA, AMZN, BRK-B, AAPL, MELI, CELH, AXON, CAVA, DUOL, APP, NFLX, UBER, COIN
