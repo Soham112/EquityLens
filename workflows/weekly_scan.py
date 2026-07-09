@@ -59,7 +59,7 @@ def run_weekly_scan() -> dict:
     _refresh_bigdata_cache(all_tickers)
 
     # Step 2: Run sector funnel
-    # E9 decision 2026-07-10: top-5 macro sectors (was top-3). Backtest evidence:
+    # E9 decision 2026-07-09: top-5 macro sectors (was top-3). Backtest evidence:
     # top-3 caught the eventual best sector only 36% of weeks, top-5 catches 51%.
     # Deep-scan universe grows ~60→~100 stocks — the price of that blind spot.
     universe = run_weekly_funnel(top_n_macro=5, top_n_micro=3)

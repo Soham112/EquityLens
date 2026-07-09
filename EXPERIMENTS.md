@@ -63,7 +63,7 @@ that's what keeps this log honest.
 ---
 
 ### E8 — LT shadow tracking: measure the road not taken
-- **Date started:** 2026-07-10
+- **Date started:** 2026-07-09
 - **Change:** every gate that demotes a BUY → WATCHLIST now stamps its name on the
   signal (`demoted_by`: valuation_cap, macro_penalty, sector_gate, correlation_gate,
   earnings_gate, vix_pause, conviction_trend, mistake_pattern). Demoted signals and
@@ -85,14 +85,14 @@ that's what keeps this log honest.
   - _Weekly updates go here (cohort sizes | avg 30/90d vs baseline | verdicts)_
 
 ### E9 — Sector funnel backtest (Phase 1: validate on history before production)
-- **Date:** 2026-07-10
+- **Date:** 2026-07-09
 - **Change:** none to production yet — `core/sector_backtest.py` replays the live
   ranking formula (50% rel-return / 30% accel / 20% breadth, exact normalizations)
   weekly over 2021-01 → 2026-07 (287 weeks, high fidelity — live funnel also scores
   off ETF price/volume). Dashboard: "📊 5-Year Sector Backtest" button on Weekly
   Review; API `/api/backtest/sectors` (`?refresh=true` recomputes).
 - **Why backtest, not forward-observe:** the funnel is pure math — mechanically
-  replayable. Doctrine (from user, 2026-07-10): backtest what is replayable;
+  replayable. Doctrine (from user, 2026-07-09): backtest what is replayable;
   forward-observe only what depends on live judgment (E7's chart vision).
 - **FINDINGS (282 scored weeks):**
   - Top-3 avg forward-4w return +1.17% vs +1.11% for excluded sectors — **no
@@ -104,7 +104,7 @@ that's what keeps this log honest.
     live mix (+1.15%) — hypothesis for recalibration, NOT a conclusion (single
     window, in-sample fit).
   - Rotation sim since 2021: formula top-3 1.98x vs SPY 2.19x vs equal-weight 2.06x.
-- **Out-of-sample validation (2026-07-10, `walk_forward()`, top-5 baskets,
+- **Out-of-sample validation (2026-07-09, `walk_forward()`, top-5 baskets,
   pre-registered rule: beat live in ≥3/4 test years by ≥0.10%/4w):**
   - Survivors: 40/40/20 (3/4, +0.32%/4w), accel-only (3/4, +0.27%), equal thirds
     (**4/4**, +0.26%). Failed: return-only, 70/30/0, 60/20/20 (0-1/4).
@@ -113,7 +113,7 @@ that's what keeps this log honest.
     live −0.23%) — single-factor fragility; ruled out.
   - Walk-forward selection (+1.57%) barely beat always-live (+1.48%) — no magic
     in chasing the recent best formula.
-- **DECISION (user, 2026-07-10):** top-5 cutoff → PRODUCTION (weekly_scan now runs
+- **DECISION (user, 2026-07-09):** top-5 cutoff → PRODUCTION (weekly_scan now runs
   `top_n_macro=5`; deep-scan universe ~60→~100 stocks). Weight formula stays
   50/30/20 — a challenger graduates only after the LIVE formula race confirms the
   backtest ("backtest first, actual results, then change production").
