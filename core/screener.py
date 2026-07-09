@@ -960,11 +960,23 @@ def swing_momentum_scan(
             f"| suggested=${s.suggested_dollars:.0f} | {s.notes}"
         )
 
-    # Chart analysis: only 4+/7 signals earn a Vision call (saves cost + focuses attention)
+    # Chart analysis threshold follows the ADAPTIVE signals gate: strict = 4+/7
+    # (cost control), exploration with a loose signals gate = 3+/7 — otherwise
+    # loose-eligible candidates reach auto-entry chartless and are silently skipped
+    # (found live 2026-07-09: MGM 3/7, R/R 3.85, never charted, never entered).
+    chart_min = 4
+    try:
+        from config.settings import settings as _settings
+        if getattr(_settings, "swing_entry_mode", "strict") == "exploration":
+            from core.feedback import load_gate_state
+            if load_gate_state().get("signals") == "loose":
+                chart_min = _settings.swing_explore_min_signals
+    except Exception as e:
+        logger.warning(f"[SwingScan] adaptive chart threshold check failed, using 4+/7: {e}")
     if run_chart_analysis and regime != "BEARISH":
-        chart_candidates = [s for s in results if s.signals_score >= 4]
+        chart_candidates = [s for s in results if s.signals_score >= chart_min]
         if chart_candidates:
-            logger.info(f"[SwingScan] Running chart analysis on {len(chart_candidates)} candidates (4+/7 signals)...")
+            logger.info(f"[SwingScan] Running chart analysis on {len(chart_candidates)} candidates ({chart_min}+/7 signals)...")
             _apply_chart_vision(chart_candidates)
 
     return results

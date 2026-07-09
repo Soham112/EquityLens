@@ -29,6 +29,13 @@ that's what keeps this log honest.
 - **How to judge:** per-gate cohort scoreboard at `/api/feedback/gates` — each cohort vs
   the clean cohort. System decides per gate at 10+ closed trades; log the outcome here.
 - **Status: OBSERVING** — gate state: all loose. Zero cohort trades yet.
+  - 2026-07-09 — first live run exposed a coupling bug: entry gate loosened to 3+/7
+    but chart vision still only ran on 4+/7, so loose-eligible candidates reached
+    auto-entry chartless and were silently skipped (MGM: 3/7, bounce, R/R 3.85).
+    Fixed same day — chart threshold now follows the adaptive signals gate.
+    First probation entry after fix: **MGM 3/7 bounce R/R 3.9, $121 (0.5x),
+    tag strict:signals, stop $45.54**. Cost note: 3+/7 charting ≈ +25-30 vision
+    calls/day vs 4+/7. Cohorts: signals=1 open, risk_reward=0, entry_zone=0.
   - _Weekly updates go here (date | cohort sizes | hit rates | any self-tightening)_
 
 ### E6 — Mistake patterns feed conviction scoring
