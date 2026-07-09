@@ -259,9 +259,17 @@ that's what keeps this log honest.
   chart count, not dollars). Harness fixed: native-type coercion + default=float,
   fail-fast proof-of-save after chart #1, and any failure after a paid call now
   ABORTS the run. Hard rules recorded in memory.
-- **Status: ON HOLD — awaiting user decision on whether to fund a re-run
-  (~$5-6 at the measured $0.030/chart for ~180 charts, or ~$10 for the full 350).
-  No vision spend without explicit approval.**
+- **Decision (user, 2026-07-09): free path first.** `grade_live_verdicts()` scores
+  the vision verdicts every daily scan already saves (no API cost, windows mature
+  daily; Sunday task re-runs it). A ~$10 bear-era-weighted study (300-400 charts,
+  all 2022-23) is pre-approved in principle for LATER, on user's go signal only.
+- **First free grading (2026-07-09, 66 verdicts, windows 0-8 trading days — far
+  too young for conclusions):** enter_in_zone −0.33% avg / 52% win (n=29 latest)
+  vs wait +0.84% / 48% (n=25) — the WAIT cohort is ahead so far, i.e. mildly
+  inverted. NOT actionable at this sample size; logged so nobody can say later we
+  didn't see it early. Alarm threshold (pre-registered): inversion persisting at
+  n≥50 with fwd10+ windows.
+- **Status: OBSERVING (free grading weekly; paid bear-era study deferred).**
 
 ## Settled experiments
 

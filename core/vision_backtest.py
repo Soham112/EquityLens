@@ -192,3 +192,65 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
     run_vision_backtest()
     print(json.dumps(report(), indent=1))
+
+
+# ── Free grading of LIVE vision verdicts ──────────────────────────────────────
+# Every daily scan saves vision's verdicts in data/swing_candidates_{date}.json.
+# Grading them costs only price data — no vision calls. Windows mature daily;
+# re-run weekly (Sunday review) and the stats strengthen on their own.
+
+def grade_live_verdicts() -> dict:
+    import glob
+    import numpy as np
+    import pandas as pd
+    import yfinance as yf
+
+    verdicts = []
+    for f in sorted(glob.glob("data/swing_candidates_*.json")):
+        day = f.split("_")[-1][:10]
+        cands = json.load(open(f))
+        if isinstance(cands, dict):
+            cands = cands.get("candidates", [])
+        for c in cands:
+            if c.get("entry_type") and c.get("price"):
+                verdicts.append({"ticker": c["ticker"], "date": day,
+                                 "entry_type": c["entry_type"],
+                                 "pattern": c.get("pattern"),
+                                 "price": float(c["price"]),
+                                 "in_zone": (c.get("entry_zone_low") is not None
+                                             and c.get("entry_zone_high") is not None
+                                             and c["entry_zone_low"] * 0.98 <= c["price"] <= c["entry_zone_high"] * 1.05)})
+    if not verdicts:
+        return {"verdicts": 0}
+
+    tickers = sorted({v["ticker"] for v in verdicts})
+    start = min(v["date"] for v in verdicts)
+    raw = yf.download(tickers, start=start, progress=False,
+                      auto_adjust=True, group_by="ticker")
+    for v in verdicts:
+        try:
+            closes = raw[v["ticker"]]["Close"].dropna()
+            after = closes[closes.index.date > datetime.date.fromisoformat(v["date"])]
+            for label, nd in (("fwd5", 5), ("fwd10", 10), ("fwd21", 21)):
+                v[label] = round(float(after.iloc[nd - 1] / v["price"] - 1), 4) if len(after) >= nd else None
+            v["fwd_latest"] = round(float(after.iloc[-1] / v["price"] - 1), 4) if len(after) else None
+        except Exception:
+            v["fwd5"] = v["fwd10"] = v["fwd21"] = v["fwd_latest"] = None
+
+    def stats(rows, key):
+        vals = [r[key] for r in rows if r.get(key) is not None]
+        if not vals:
+            return {"n": 0}
+        return {"n": len(vals), "avg": round(float(np.mean(vals)), 4),
+                "win_rate": round(float(np.mean([x > 0 for x in vals])), 3)}
+
+    enter = [v for v in verdicts if v["entry_type"] in ("breakout", "pullback", "bounce") and v["in_zone"]]
+    action = [v for v in verdicts if v["entry_type"] in ("breakout", "pullback", "bounce")]
+    wait = [v for v in verdicts if v["entry_type"] == "wait"]
+    report = {"verdicts": len(verdicts),
+              "window_note": "young data — most verdicts have only days of forward history; re-run weekly",
+              "cohorts": {}}
+    for name, rows in (("enter_in_zone", enter), ("actionable_any", action),
+                       ("wait", wait), ("all", verdicts)):
+        report["cohorts"][name] = {k: stats(rows, k) for k in ("fwd5", "fwd10", "fwd21", "fwd_latest")}
+    return report
