@@ -31,7 +31,9 @@ logger = logging.getLogger(__name__)
 RESULTS_FILE = "data/vision_backtest.jsonl"
 MAX_CHARTS = 350
 COST_GUARD_USD = 5.0
-EST_COST_PER_CHART = 0.014
+# Measured, not estimated: the 2026-07-09 run billed ~$10 for ~350 charts
+# (my prior 0.014 estimate was half the real cost — larger image tokens)
+EST_COST_PER_CHART = 0.030
 
 
 def _sample_entries(n=MAX_CHARTS):
@@ -80,6 +82,7 @@ def run_vision_backtest(max_charts: int = MAX_CHARTS) -> None:
                     stall=True, time_stop=None)
 
     for n_done, (t, i, n_sig, date_str) in enumerate(todo, 1):
+        # Pre-cost steps: safe to skip-and-continue on failure (no money spent yet)
         try:
             df_full = raw[t].dropna(subset=["Close"])
             # as-of-date slice: ~400 calendar rows of context, ending at entry day
@@ -91,10 +94,19 @@ def run_vision_backtest(max_charts: int = MAX_CHARTS) -> None:
             png, _ = render_swing_chart(t, df_asof, sr, save=False)
             if png is None:
                 continue
-            verdict = _run_vision_analysis(t, png, sr, price, df=df_asof)
-            if verdict is None:
-                continue
+        except Exception as e:
+            logger.warning(f"[VisionBT] {t} {date_str} pre-cost step failed (skipping): {e}")
+            continue
 
+        # THE PAID CALL — anything failing after this point ABORTS the whole run
+        # (2026-07-09 incident: continuing after post-call failures burned ~$10
+        # across 350 calls with zero records saved)
+        verdict = _run_vision_analysis(t, png, sr, price, df=df_asof)
+        if verdict is None:
+            logger.error(f"[VisionBT] {t}: vision call returned None — aborting run "
+                         "(check API credits/limits before resuming)")
+            break
+        try:
             # forward simulation with production exits (daily closes after entry)
             closes = df_full["Close"].values
             lows = df_full["Low"].values
@@ -110,20 +122,30 @@ def run_vision_backtest(max_charts: int = MAX_CHARTS) -> None:
             in_zone = (lo is not None and hi is not None
                        and lo * 0.98 <= price <= hi * 1.05)
             rec = {
-                "ticker": t, "date": date_str, "n_signals": n_sig,
-                "entry_type": entry_type, "in_zone": in_zone,
+                "ticker": str(t), "date": str(date_str), "n_signals": int(n_sig),
+                "entry_type": str(entry_type), "in_zone": bool(in_zone),
                 "pattern": verdict.get("pattern"), "pattern_confidence": verdict.get("pattern_confidence"),
                 "vision_rr": verdict.get("risk_reward"),
-                "sim_return": round(sim_ret, 4), "hold_days": hold, "exit_reason": why,
+                "sim_return": round(float(sim_ret), 4), "hold_days": int(hold), "exit_reason": str(why),
                 "fwd21": round(float(closes[i + 21] / price - 1), 4) if i + 21 < len(closes) else None,
             }
+            # default=float catches any residual numpy scalar — a paid vision call
+            # must NEVER be lost to a serialization error again (2026-07-09: 350
+            # calls, ~$10, zero records saved because n_signals was numpy int64)
             with open(RESULTS_FILE, "a") as f:
-                f.write(json.dumps(rec) + "\n")
+                f.write(json.dumps(rec, default=float) + "\n")
+            # Fail-fast proof-of-save: the first paid call must produce a readable
+            # record on disk before any further money is spent
+            if n_done == 1:
+                with open(RESULTS_FILE) as f:
+                    assert any(line.strip() for line in f), "first record did not persist"
             logger.info(f"[VisionBT] {n_done}/{len(todo)} {t} {date_str}: "
                         f"{entry_type} {rec['pattern']} → sim {sim_ret:+.1%} ({why})")
             time.sleep(0.5)
         except Exception as e:
-            logger.warning(f"[VisionBT] {t} {date_str} failed: {e}")
+            logger.error(f"[VisionBT] {t} {date_str} FAILED AFTER PAID CALL — "
+                         f"ABORTING to stop spend: {e}")
+            break
     logger.info("[VisionBT] run complete")
 
 

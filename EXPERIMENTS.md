@@ -242,7 +242,16 @@ that's what keeps this log honest.
   and vision-WAIT must underperform ENTER. If ENTER ≈ everyone, vision is
   theater and the chart budget should be cut, not raised. Secondary: per-pattern
   and per-entry-type stats (needs ≥8 charts per pattern to report).
-- **Status: RUNNING.**
+- **INCIDENT (2026-07-09 run): FAILED — ~$10 billed, ZERO records saved.** All
+  ~350 vision calls succeeded (billed) but every save crashed on a numpy int64
+  in json.dumps; the per-chart try/except swallowed the error and kept spending.
+  Cost also 2x estimate ($0.030/chart real vs $0.014 assumed — guard capped
+  chart count, not dollars). Harness fixed: native-type coercion + default=float,
+  fail-fast proof-of-save after chart #1, and any failure after a paid call now
+  ABORTS the run. Hard rules recorded in memory.
+- **Status: ON HOLD — awaiting user decision on whether to fund a re-run
+  (~$5-6 at the measured $0.030/chart for ~180 charts, or ~$10 for the full 350).
+  No vision spend without explicit approval.**
 
 ## Settled experiments
 
