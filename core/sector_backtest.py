@@ -288,6 +288,7 @@ def run_backtest() -> dict:
             f"equal-weight-all-sectors {curves['equal_weight'][-1]:.2f}x.")
 
     result = {
+        "walk_forward": walk_forward(top_k=5, _weekly=weekly, _sectors=sectors),
         "generated_at": datetime.datetime.now().isoformat(timespec="seconds"),
         "window": {"start": weekly[0]["date"] if weekly else None,
                    "end": weekly[-1]["date"] if weekly else None,
@@ -319,7 +320,7 @@ def load_or_run(refresh: bool = False) -> dict:
     return run_backtest()
 
 
-def walk_forward(top_k: int = 5) -> dict:
+def walk_forward(top_k: int = 5, _weekly=None, _sectors=None) -> dict:
     """
     Out-of-sample validation of the weight grid (E9 follow-up).
 
@@ -333,7 +334,9 @@ def walk_forward(top_k: int = 5) -> dict:
     50/30/20 only if it beats it in >= 3 of the 4 test years (2023-2026) AND by
     >= 0.10%/4w on average across them.
     """
-    weekly, close, sectors = _build_weekly()
+    if _weekly is None:
+        _weekly, _, _sectors = _build_weekly()
+    weekly, sectors = _weekly, _sectors
     scored = [w for w in weekly if all(v is not None for v in w["fwd_4w"].values())]
 
     def basket_ret(w, wr, wa, wb):

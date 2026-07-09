@@ -1659,6 +1659,37 @@
       </div>`;
     });
     html += `<div style="font-size:11px;color:#9ca3af;margin-top:8px">Cutoff capture of the eventual best sector: top-3 ${(bt.cutoffs.top3*100).toFixed(0)}% · top-4 ${(bt.cutoffs.top4*100).toFixed(0)}% · top-5 ${(bt.cutoffs.top5*100).toFixed(0)}%. Weight-grid results are historical fits — treat the winner as a hypothesis for E10, not a conclusion.</div>`;
+
+    // Walk-forward out-of-sample validation (top-5 baskets)
+    const wf = bt.walk_forward;
+    if (wf && wf.per_year_table) {
+      const years = Object.keys(Object.values(wf.per_year_table)[0]);
+      const testYears = years.filter(y => y >= '2023');
+      html += `<div style="margin:18px 0 4px;font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#6b7280">Out-of-sample validation — avg 4w return of each formula's TOP-5 basket, per year</div>
+        <div style="font-size:11px;color:#9ca3af;margin-bottom:8px">2021-22 are training-only; a real edge wins in most test years (2023+), a lucky fit wins one year big. Pre-registered bar: beat live in ≥3 of 4 test years by ≥0.10%/4w.</div>`;
+      html += `<table style="width:100%;border-collapse:collapse;font-size:12.5px"><thead><tr style="border-bottom:1px solid #e5e7eb;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:#6b7280">
+        <th style="text-align:left;padding:6px 4px">Combo</th>${years.map(y => `<th style="text-align:right;padding:6px 4px">${y}</th>`).join('')}<th style="text-align:center;padding:6px 8px">vs live</th></tr></thead><tbody>`;
+      const liveRow = wf.per_year_table['live 50/30/20'];
+      Object.entries(wf.per_year_table).forEach(([name, row]) => {
+        const isLive = name.startsWith('live');
+        const verdict = (wf.verdicts || []).find(v => v.combo === name);
+        html += `<tr style="border-bottom:1px solid #f3f4f6${isLive ? ';background:#f9fafb;font-weight:600' : ''}">
+          <td style="padding:6px 4px">${name}${isLive ? ' ←' : ''}</td>` +
+          years.map(y => {
+            const v = row[y];
+            const beat = !isLive && testYears.includes(y) ? (v > liveRow[y] ? ' ✓' : ' ✗') : '';
+            return `<td style="padding:6px 4px;text-align:right;color:${v >= 0 ? '#111' : '#dc2626'}">${(v*100).toFixed(2)}%<span style="font-size:10px;color:${beat.trim()==='✓' ? '#16a34a' : '#dc2626'}">${beat}</span></td>`;
+          }).join('') +
+          `<td style="padding:6px 8px;text-align:center;font-size:11px">${verdict ? (verdict.ADOPT ? `<span style="color:#16a34a;font-weight:700">${verdict.years_beating_live} · ${(verdict.avg_margin_4w*100).toFixed(2)}% ✓</span>` : `<span style="color:#9ca3af">${verdict.years_beating_live} ✗</span>`) : '—'}</td></tr>`;
+      });
+      html += '</tbody></table>';
+      if (wf.walk_forward && wf.walk_forward.picks) {
+        html += `<div style="font-size:11px;color:#9ca3af;margin-top:8px">Walk-forward selection (combo picked from the prior 2 years, tested on the unseen year): ` +
+          wf.walk_forward.picks.map(p => `${p.year} picked <b>${p.picked}</b> → ${(p.test_avg*100).toFixed(2)}%`).join(' · ') +
+          ` — avg ${(wf.walk_forward.wf_avg*100).toFixed(2)}% vs always-live ${(wf.walk_forward.live_avg*100).toFixed(2)}%.</div>`;
+      }
+      html += `<div style="font-size:11px;color:#92400e;background:#fffbeb;border-radius:4px;padding:8px 12px;margin-top:8px">△ Survivors (equal thirds 4/4, 40/40/20 3/4) stay SHADOW-ONLY: the live formula race (logged every Sunday, ~12 scored weeks → decision) is the final referee before any weight change ships. Accel-only ruled out — worst 2022 bear (−0.53%).</div>`;
+    }
     return html;
   }
 
