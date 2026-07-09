@@ -213,6 +213,16 @@ that's what keeps this log honest.
 - **Status: OBSERVING.** S1-only change awaiting user decision; vision sample
   (~$5, ~350-400 charts) approved and queued.
 
+### E11b — insider_buying signal: live fetch → Sunday cache (cost fix, not removal)
+- **Date:** 2026-07-09. Audit: fired 0 times in 522 candidates over 7 scan days
+  while costing ~150 per-ticker yfinance calls/day. User questioned keeping it.
+- **Decision:** KEEP in the 7-signal scale (removal would rescale every threshold
+  and break E7 cohort comparability) but read from the weekly sentiment cache's
+  `yfinance_insider` block — zero scan-time cost. Tickers outside the cache don't
+  fire (same outcome as before: it never fired anyway). short_squeeze untouched
+  (fires 5%, computed from already-fetched data). Per-screen hit rates will judge
+  both as live data accrues.
+
 ### E12 — Swing stops: S1 primary, ATR floor demoted to fallback (SHIPPED)
 - **Date shipped:** 2026-07-09 (user decision, on E11's era-split evidence)
 - **Change:** swing chart stop = S1 − 0.5×ATR whenever a tested S1 exists;

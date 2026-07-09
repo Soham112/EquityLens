@@ -538,11 +538,22 @@ def _check_narrative_momentum(f: Optional[FundamentalsData]) -> tuple[bool, str]
 
 
 def _check_insider_buying(ticker: str) -> tuple[bool, str]:
-    """Signal 6: net insider buying in open market — executives putting own money in."""
+    """Signal 6: net insider buying in open market — executives putting own money in.
+
+    Reads the Sunday sentiment cache (yfinance_insider block) instead of a live
+    per-ticker fetch: the old live call cost ~150 HTTP requests per scan day and
+    fired 0 times in 522 candidates over 7 days (2026-07-09 audit). Tickers
+    outside the weekly cache simply don't fire — same outcome, zero cost.
+    """
     try:
-        from core.data_layer import fetch_insider_data
-        insider = fetch_insider_data(ticker)
-        if insider.net_insider_signal == "BULLISH" or insider.ceo_cfo_buying:
+        import json
+        from core.bigdata_client import CACHE_DIR
+        cache_file = CACHE_DIR / f"{ticker.upper()}.json"
+        if not cache_file.exists():
+            return False, ""
+        with open(cache_file) as f:
+            ins = json.load(f).get("yfinance_insider") or {}
+        if ins.get("net_signal") == "BULLISH" or ins.get("ceo_cfo_buying"):
             return True, "Net insider buying — executives adding shares"
     except Exception:
         pass
