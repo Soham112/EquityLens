@@ -710,7 +710,9 @@ def swing_universe_prefilter(max_tickers: int = 150) -> list[tuple[str, str]]:
     if raw is None:
         try:
             raw = yf.download(
-                tickers, period="90d", interval="1d",
+                # 400d (was 90d): charts read this cache and now need MA200 +
+                # 52-week-high context; prefilter itself still uses recent tails
+                tickers, period="400d", interval="1d",
                 progress=False, auto_adjust=True, group_by="ticker",
             )
             try:

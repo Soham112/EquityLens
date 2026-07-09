@@ -92,13 +92,15 @@ def _fetch_ohlcv(ticker: str) -> Optional[pd.DataFrame]:
             if isinstance(cached.columns, pd.MultiIndex) and ticker in cached.columns.get_level_values(0):
                 df = cached[ticker][["Open", "High", "Low", "Close", "Volume"]].copy().dropna()
                 if len(df) >= 40:
-                    return df.tail(LOOKBACK_DAYS)
+                    # cache now holds ~400d so charts get MA200/52w-high context;
+                    # display window stays 120d (sliced in render_swing_chart)
+                    return df.tail(400)
         except Exception:
             pass
 
     try:
         raw = yf.download(
-            ticker, period="6mo", interval="1d",
+            ticker, period="18mo", interval="1d",
             progress=False, auto_adjust=True,
         )
         if raw is None or len(raw) < 40:
@@ -106,7 +108,7 @@ def _fetch_ohlcv(ticker: str) -> Optional[pd.DataFrame]:
         if isinstance(raw.columns, pd.MultiIndex):
             raw.columns = raw.columns.get_level_values(0)
         df = raw[["Open", "High", "Low", "Close", "Volume"]].copy().dropna()
-        return df.tail(LOOKBACK_DAYS)
+        return df.tail(400)
     except Exception as e:
         logger.error(f"[SwingChart] {ticker} OHLCV fetch failed: {e}")
         return None
@@ -205,10 +207,17 @@ def render_swing_chart(
     Returns (png_bytes, save_path).
     """
     df = df.copy()
+    # Long-context indicators computed on the FULL history (df may hold ~400d),
+    # then the display slices to the 120d swing window
     df["MA20"] = df["Close"].rolling(20).mean()
     df["MA50"] = df["Close"].rolling(50).mean()
+    df["MA200"] = df["Close"].rolling(200).mean()
+    # only claim a "52w high" when there's real long history (older 90d caches
+    # would otherwise mislabel a 90-day high)
+    hi52 = float(df["Close"].rolling(252, min_periods=200).max().iloc[-1]) if len(df) >= 200 else None
     df["RSI"]  = _calc_rsi(df["Close"])
     df["VolMA20"] = df["Volume"].rolling(20).mean()
+    df = df.tail(LOOKBACK_DAYS)
 
     df["DateNum"] = mdates.date2num(df.index.to_pydatetime())
     ohlc = df[["DateNum", "Open", "High", "Low", "Close"]].dropna().values
@@ -216,6 +225,7 @@ def render_swing_chart(
     current_price = float(df["Close"].iloc[-1])
     ma20_last = float(df["MA20"].iloc[-1]) if df["MA20"].notna().any() else None
     ma50_last = float(df["MA50"].iloc[-1]) if df["MA50"].notna().any() else None
+    ma200_last = float(df["MA200"].iloc[-1]) if df["MA200"].notna().any() else None
 
     with plt.rc_context(_STYLE):
         fig, (ax1, ax2, ax3) = plt.subplots(
@@ -233,6 +243,16 @@ def render_swing_chart(
         if ma50_last:
             ax1.plot(df["DateNum"], df["MA50"], color="#ffa726", linewidth=1.5,
                      label=f"MA50  {ma50_last:.1f}", zorder=3)
+        if ma200_last:
+            ax1.plot(df["DateNum"], df["MA200"], color="#ab47bc", linewidth=1.5,
+                     label=f"MA200 {ma200_last:.1f}", zorder=3)
+
+        # 52-week high reference (only drawn when near enough not to squash the
+        # y-axis; the exact number always goes to the model via the prompt)
+        if hi52 and hi52 <= current_price * 1.25:
+            ax1.axhline(hi52, color="#9e9e9e", linestyle=":", linewidth=1.2, alpha=0.9)
+            ax1.text(df["DateNum"].iloc[len(df)//2], hi52,
+                     f" 52w high ${hi52:.1f}", color="#9e9e9e", fontsize=8.5, va="bottom")
 
         # Current price line
         ax1.axhline(current_price, color="#b39ddb", linestyle=":", linewidth=1, alpha=0.9)
@@ -346,13 +366,25 @@ def _build_vision_prompt(
         except Exception:
             vol_desc = ""
 
+    # Long-horizon context the 120d window can't show — exact numbers for the model
+    ctx_desc = ""
+    if df is not None and len(df) >= 200:
+        try:
+            close = df["Close"]
+            hi52 = float(close.rolling(252, min_periods=200).max().iloc[-1])
+            ma200 = float(close.rolling(200).mean().iloc[-1])
+            ctx_desc = (f"\nLong-horizon context:\n"
+                        f"  52-week high: ${hi52:.2f} (price is {(current_price/hi52-1)*100:+.1f}% from it)\n"
+                        f"  MA200: ${ma200:.2f} (price is {(current_price/ma200-1)*100:+.1f}% vs it)\n")
+        except Exception:
+            ctx_desc = ""
+
     return f"""Analyze this 120-day daily swing trading chart for {ticker} (current price: ${current_price:.2f}).
 
 Pre-identified support/resistance levels (already marked as dashed lines on chart):
 {sr_desc}
-{vol_desc}
-
-The chart shows: candlesticks, MA20 (blue), MA50 (orange), volume panel, RSI(14) panel.
+{vol_desc}{ctx_desc}
+The chart shows: candlesticks, MA20 (blue), MA50 (orange), MA200 (purple, when available), 52-week-high line (grey dotted, when in view), volume panel, RSI(14) panel.
 
 Classify the current swing setup and return valid JSON:
 {{
@@ -449,7 +481,9 @@ def analyze_swing_candidate(ticker: str) -> Optional[SwingChartSignal]:
         return None
 
     current_price = float(df["Close"].iloc[-1])
-    sr_levels = _find_sr_levels(df, current_price)
+    # S/R detection stays on the 120d window (the stop formula's definition);
+    # the longer df feeds MA200/52w-high context in the render + prompt
+    sr_levels = _find_sr_levels(df.tail(LOOKBACK_DAYS), current_price)
 
     png_bytes, chart_path = render_swing_chart(ticker, df, sr_levels, save=True)
     if png_bytes is None:
@@ -468,18 +502,21 @@ def analyze_swing_candidate(ticker: str) -> Optional[SwingChartSignal]:
     target_level = float(result.get("target_level", current_price * 1.10) or current_price * 1.10)
     thesis       = result.get("chart_thesis", "")
 
-    # Stop-loss: S1 − 0.5×ATR (support anchor + stop-hunt buffer), but never risk
-    # more than 2.5 ATRs — near-high setups have no nearby tested support, and an
-    # S1 far below would make every breakout's R/R look terrible.
+    # Stop-loss — E12 (2026-07-09): S1 − 0.5×ATR is the PRIMARY stop; the old
+    # 2.5×ATR floor override was removed after the E11 backtest (4k entries,
+    # era-split stable: structural stops beat the floored formula on avg, median
+    # AND win rate in both 2022-23 and 2024-26 — the floor tightened stops into
+    # stop-hunt range). 2.5×ATR survives only as the fallback when no tested S1
+    # exists. Risk-cap sizing scales position to stop distance, so a wider stop
+    # means a smaller position — dollar risk unchanged.
     entry_mid = (entry_low + entry_high) / 2
     s1 = next((lvl.price for lvl in sr_levels if lvl.label == "S1"), None)
     atr = _calc_atr(df)
     if atr is not None:
-        atr_floor = entry_mid - 2.5 * atr
         if s1 is not None:
-            stop_level = round(max(s1 - 0.5 * atr, atr_floor), 2)
+            stop_level = round(s1 - 0.5 * atr, 2)
         else:
-            stop_level = round(atr_floor, 2)
+            stop_level = round(entry_mid - 2.5 * atr, 2)
     else:
         stop_level = float(result.get("stop_level", current_price * 0.92) or current_price * 0.92)
 

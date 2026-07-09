@@ -213,6 +213,37 @@ that's what keeps this log honest.
 - **Status: OBSERVING.** S1-only change awaiting user decision; vision sample
   (~$5, ~350-400 charts) approved and queued.
 
+### E12 — Swing stops: S1 primary, ATR floor demoted to fallback (SHIPPED)
+- **Date shipped:** 2026-07-09 (user decision, on E11's era-split evidence)
+- **Change:** swing chart stop = S1 − 0.5×ATR whenever a tested S1 exists;
+  entry − 2.5×ATR only as fallback (was: max() of both — the floor override
+  tightened stops into stop-hunt range). LT weekly stop formula UNCHANGED
+  (E11 evidence was daily/swing bars only).
+- **Evidence:** E11 era split — beats old formula on avg AND median AND win rate
+  in both 2022-23 and 2024-26. Dollar risk unchanged (risk-cap sizing scales
+  position to stop distance; wider stop = smaller position).
+- **How to judge live:** stop-out rate and avg return of post-E12 swing exits vs
+  the pre-E12 cohort (closed-trade log). Also expect fewer HARD_STOP exits.
+- **Status: OBSERVING (live since 2026-07-09).**
+
+### E13 — Sampled chart-vision backtest: grading the analyst (~$5, one-time)
+- **Date started:** 2026-07-09. Budget note: the ~$5 is ONE-TIME for this
+  backtest — never scale daily vision spend without explicit approval (user).
+- **Change (prep, production):** vision prompt → 18-pattern vocabulary +
+  anti-bias rules; charts now carry MA200 + 52w-high line; prefilter OHLCV cache
+  400d (was 90d) so charts get long context from the same single batch download;
+  numeric MA200/52w-high context added to the prompt.
+- **Method:** ~350 historical screener candidates, stratified half 2022-23 /
+  half 2024-26, chart rendered AS OF the date with the production renderer,
+  analyzed with the production prompt, outcomes simulated with production (E12)
+  exits. Incremental jsonl — interruption loses nothing paid for.
+- **How to judge (pre-registered):** vision-ENTER (actionable entry_type +
+  price in zone) must beat blind-entry-everyone on avg sim return AND win rate,
+  and vision-WAIT must underperform ENTER. If ENTER ≈ everyone, vision is
+  theater and the chart budget should be cut, not raised. Secondary: per-pattern
+  and per-entry-type stats (needs ≥8 charts per pattern to report).
+- **Status: RUNNING.**
+
 ## Settled experiments
 
 ### E4 — Valuation cap must demote the signal, not just the number (BUG FIX)

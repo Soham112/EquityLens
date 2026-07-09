@@ -36,11 +36,17 @@ Both compound independently. Exit proceeds return to cash (`p.cash += proceeds` 
 
 ---
 
-## Stop-Loss Formula (both tracks)
+## Stop-Loss Formula
 
 ```
-stop = max(S1 − 0.5×ATR,  entry − 2.5×ATR)
+Swing (E12, since 2026-07-09):  stop = S1 − 0.5×ATR   (entry − 2.5×ATR only when no tested S1)
+Long-term (unchanged):          stop = max(S1 − 0.5×ATR,  entry − 2.5×ATR)
 ```
+
+E11 backtest (4k entries, era-split stable) showed the 2.5×ATR floor override
+tightened swing stops into stop-hunt range — structural stops won on avg, median
+and win rate in both 2022-23 and 2024-26. Dollar risk unchanged: risk-cap sizing
+scales position size to stop distance.
 
 - S1 = nearest tested support below price (from `_find_sr_levels`: 5-bar swing lows, 1.5% clustering, ≥2 tests)
 - 0.5×ATR buffer below support survives stop hunts / liquidity sweeps
