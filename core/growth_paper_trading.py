@@ -234,12 +234,45 @@ def auto_enter_swing_signals(swing_signals: list) -> list[str]:
         pass
 
     actions: list[str] = []
+
+    # ── Exploration mode: adaptive selection gates ──
+    # Selection gates (signals / R/R / entry zone) run loose, tag entries with the
+    # strict gates they'd have failed, and let per-gate cohort evidence re-tighten
+    # them (feedback.adapt_swing_gates — one-way ratchet). Risk controls below
+    # (earnings blackout, sector slots, risk cap, stops) are NEVER loosened.
+    exploring = getattr(settings, "swing_entry_mode", "strict") == "exploration"
+    gate_state = {}
+    if exploring:
+        try:
+            from core.feedback import adapt_swing_gates, load_gate_state
+            for a in adapt_swing_gates():
+                actions.append(f"[GateAdapt] {a}")
+            gate_state = load_gate_state()
+        except Exception as e:
+            logger.warning(f"Gate adaptation failed — falling back to strict gates: {e}")
+            exploring = False
+
+    def _loose(gate: str) -> bool:
+        return exploring and gate_state.get(gate) == "loose"
+
+    min_signals = settings.swing_explore_min_signals if _loose("signals") else settings.swing_strict_min_signals
+    min_rr = settings.swing_explore_min_rr if _loose("risk_reward") else settings.swing_strict_min_rr
+    zone_tol = settings.swing_explore_zone_tolerance if _loose("entry_zone") else settings.swing_strict_zone_tolerance
+
     for s in swing_signals:
         score = getattr(s, "signals_score", 0)
         entry_type = getattr(s, "entry_type", None)
         rr = getattr(s, "risk_reward", None) or 0.0
-        if score < 4 or entry_type in (None, "wait") or rr < 2.0:
+        if score < min_signals or entry_type in (None, "wait") or rr < min_rr:
             continue
+
+        # Tag which STRICT gates this entry would have failed — rides into the
+        # feedback record so cohort stats can judge each loosened gate later
+        strict_tags: list[str] = []
+        if score < settings.swing_strict_min_signals:
+            strict_tags.append("strict:signals")
+        if rr < settings.swing_strict_min_rr:
+            strict_tags.append("strict:risk_reward")
 
         if s.ticker in lt_held:
             actions.append(f"{s.ticker}: setup valid but already held in LT portfolio — skip (unified pool)")
@@ -262,9 +295,11 @@ def auto_enter_swing_signals(swing_signals: list) -> list[str]:
         entry_low = getattr(s, "entry_zone_low", None)
         entry_high = getattr(s, "entry_zone_high", None)
         price = getattr(s, "price", None)
-        if price and entry_high and price > entry_high * 1.02:
+        if price and entry_high and price > entry_high * (1 + zone_tol):
             actions.append(f"{s.ticker}: setup valid but price ${price:.2f} above entry zone — not chasing")
             continue
+        if price and entry_high and price > entry_high * (1 + settings.swing_strict_zone_tolerance):
+            strict_tags.append("strict:entry_zone")
         # Below the zone is not a discount — it means the setup isn't at the
         # entry yet (or support already failed). Only the upside was guarded before.
         if price and entry_low and price < entry_low * 0.98:
@@ -304,6 +339,11 @@ def auto_enter_swing_signals(swing_signals: list) -> list[str]:
         except Exception as e:
             logger.warning(f"Mistake-pattern check failed for {s.ticker}: {e}")
 
+        # Probation sizing: entries that fail any strict gate ride at half size —
+        # more data points per dollar of risk while the cohort evidence accumulates
+        if strict_tags:
+            size = round(size * settings.swing_probation_size_mult, 2)
+
         # Risk-per-trade cap: with the chart stop known, don't size a position
         # whose stop-out would cost more than swing_max_risk_per_trade of the pool.
         chart_stop = getattr(s, "stop_level", None)
@@ -332,7 +372,9 @@ def auto_enter_swing_signals(swing_signals: list) -> list[str]:
                 fill = p.positions[s.ticker].entry_price if s.ticker in p.positions else (price or 0.0)
                 log_signal(
                     ticker=s.ticker,
-                    screens_matched=list(getattr(s, "signals_fired", []) or []),
+                    # strict:* tags ride with the fired screens — gate_cohort_report
+                    # groups closed trades by them to judge each loosened gate
+                    screens_matched=list(getattr(s, "signals_fired", []) or []) + strict_tags,
                     signal_type="SWING",
                     entry_price=fill,
                     # normalize 0-7 signal score to hunter's 0-10 scale so the
@@ -344,8 +386,9 @@ def auto_enter_swing_signals(swing_signals: list) -> list[str]:
                 )
             except Exception as e:
                 logger.warning(f"Feedback log_signal failed for {s.ticker}: {e}")
+            probation = f" | PROBATION 0.5x ({', '.join(strict_tags)})" if strict_tags else ""
             actions.append(
-                f"{s.ticker}: SWING AUTO-ENTRY {score}/7 | {entry_type} | R/R {rr:.1f}x | stop ${chart_stop or 0:.2f}"
+                f"{s.ticker}: SWING AUTO-ENTRY {score}/7 | {entry_type} | R/R {rr:.1f}x | stop ${chart_stop or 0:.2f}{probation}"
             )
     marker.write_text(datetime.datetime.now().isoformat())
     if actions:

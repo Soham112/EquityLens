@@ -45,6 +45,21 @@ class Settings:
     swing_earnings_blackout_days: int = 10   # no swing entries this close to an earnings print
     swing_max_per_macro_sector: int = 2      # max swing slots (of 6) in one macro sector
 
+    # --- Swing Entry Mode (exploration = loosened selection gates, tagged + probation-sized) ---
+    # "exploration": selection gates use the loose thresholds below; entries that
+    #   would have failed the strict gates get tagged (strict:*) and half-sized.
+    #   Per-gate cohort evidence auto-tightens individual gates (feedback.adapt_swing_gates).
+    # "strict": original gates (4+/7, R/R >= 2.0, zone +2%). Risk controls
+    #   (stops, risk cap, sector slots, earnings blackout) are NEVER loosened.
+    swing_entry_mode: str = "exploration"
+    swing_strict_min_signals: int = 4
+    swing_strict_min_rr: float = 2.0
+    swing_strict_zone_tolerance: float = 0.02
+    swing_explore_min_signals: int = 3
+    swing_explore_min_rr: float = 1.2
+    swing_explore_zone_tolerance: float = 0.05
+    swing_probation_size_mult: float = 0.5   # size multiplier for entries failing any strict gate
+
     # --- Stop Loss ATR Multipliers ---
     stop_tier1_atr: float = 2.5
     stop_tier2_atr: float = 3.5

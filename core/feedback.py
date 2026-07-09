@@ -407,6 +407,115 @@ def _update_mistake_patterns(records: list[SignalRecord]) -> None:
         logger.info(f"[Feedback] Updated mistake patterns: {[m.pattern_id for m in mistakes]}")
 
 
+# ── Swing gate exploration / self-adaptation ──────────────────────────────────
+# Exploration mode enters setups that fail the strict selection gates, tags them
+# with which gate they violated (stored in screens_matched as "strict:<gate>"),
+# and half-sizes them. Once a violated gate accumulates enough closed trades,
+# the evidence decides: if that cohort underperforms, THE GATE TIGHTENS ITSELF.
+# One-way ratchet — the system only tightens; a human re-loosens by editing
+# data/swing_gate_state.json (or deleting it to reset all gates to loose).
+
+GATE_STATE_FILE = os.path.join("data", "swing_gate_state.json")
+SWING_GATES = ("signals", "risk_reward", "entry_zone")
+GATE_MIN_CLOSED = 10          # closed trades a cohort needs before it can be judged
+GATE_KILL_HIT_RATE = 0.45     # cohort hit rate below this → tighten the gate
+GATE_KILL_EDGE = -0.03        # or avg return 3pts+ worse than the clean cohort
+
+
+def load_gate_state() -> dict:
+    """Per-gate mode: 'loose' (exploration default) or 'strict' (self-tightened)."""
+    state = {g: "loose" for g in SWING_GATES}
+    try:
+        if os.path.exists(GATE_STATE_FILE):
+            saved = json.load(open(GATE_STATE_FILE))
+            for g in SWING_GATES:
+                if saved.get(g) in ("loose", "strict"):
+                    state[g] = saved[g]
+            state["history"] = saved.get("history", [])
+    except Exception as e:
+        logger.warning(f"[GateAdapt] state load failed, using defaults: {e}")
+    state.setdefault("history", [])
+    return state
+
+
+def _save_gate_state(state: dict) -> None:
+    os.makedirs("data", exist_ok=True)
+    with open(GATE_STATE_FILE, "w") as f:
+        json.dump(state, f, indent=2)
+
+
+def gate_cohort_report() -> dict:
+    """
+    Scoreboard: closed swing trades grouped by which strict gate they violated,
+    vs the 'clean' cohort (violated none). This is what adapt_swing_gates judges.
+    """
+    records = _load_records()
+    closed = [r for r in records
+              if r.signal_type == "SWING" and r.outcome in ("WIN", "LOSS", "SCRATCH")
+              and r.return_pct is not None]
+
+    def stats(recs):
+        if not recs:
+            return {"closed": 0, "wins": 0, "hit_rate": None, "avg_return_pct": None}
+        wins = [r for r in recs if r.outcome == "WIN"]
+        return {
+            "closed": len(recs),
+            "wins": len(wins),
+            "hit_rate": round(len(wins) / len(recs), 3),
+            "avg_return_pct": round(sum(r.return_pct for r in recs) / len(recs), 4),
+        }
+
+    report = {"clean": stats([r for r in closed
+                              if not any(t.startswith("strict:") for t in r.screens_matched)])}
+    for gate in SWING_GATES:
+        tag = f"strict:{gate}"
+        report[gate] = stats([r for r in closed if tag in r.screens_matched])
+    return report
+
+
+def adapt_swing_gates() -> list[str]:
+    """
+    The self-adaptation step — called before every swing auto-entry pass.
+    For each still-loose gate with >= GATE_MIN_CLOSED closed trades in its
+    violation cohort: tighten it if the cohort's hit rate is below
+    GATE_KILL_HIT_RATE or its avg return trails the clean cohort by GATE_KILL_EDGE.
+    Returns human-readable action strings (empty when no gate changed).
+    """
+    state = load_gate_state()
+    report = gate_cohort_report()
+    clean_avg = report["clean"]["avg_return_pct"]
+    actions: list[str] = []
+
+    for gate in SWING_GATES:
+        if state.get(gate) != "loose":
+            continue
+        c = report[gate]
+        if c["closed"] < GATE_MIN_CLOSED:
+            continue
+        bad_hit = c["hit_rate"] is not None and c["hit_rate"] < GATE_KILL_HIT_RATE
+        bad_edge = (clean_avg is not None and c["avg_return_pct"] is not None
+                    and c["avg_return_pct"] < clean_avg + GATE_KILL_EDGE)
+        if bad_hit or bad_edge:
+            state[gate] = "strict"
+            evidence = (
+                f"{c['closed']} closed, hit rate {c['hit_rate']:.0%}, "
+                f"avg {c['avg_return_pct']:+.1%}"
+                + (f" vs clean {clean_avg:+.1%}" if clean_avg is not None else "")
+            )
+            state["history"].append({
+                "date": date.today().isoformat(),
+                "gate": gate,
+                "action": "TIGHTENED",
+                "evidence": evidence,
+            })
+            actions.append(f"Gate '{gate}' SELF-TIGHTENED — {evidence}")
+            logger.info(f"[GateAdapt] {actions[-1]}")
+
+    if actions:
+        _save_gate_state(state)
+    return actions
+
+
 # ── Mistake-pattern conviction penalty ────────────────────────────────────────
 # Mirrors the macro-pulse penalty design: small, bounded, evidence-gated.
 # A pattern only penalizes a candidate when (a) it has enough closed-loss

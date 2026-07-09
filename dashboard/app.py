@@ -797,6 +797,22 @@ async def feedback_mistakes():
     return {"mistakes": [asdict(m) for m in mistake_report()]}
 
 
+@app.get("/api/feedback/gates")
+async def feedback_gates():
+    """Exploration-mode gate state + per-gate cohort scoreboard + adaptation history."""
+    import sys
+    sys.path.insert(0, str(Path(__file__).parent.parent))
+    from config.settings import settings
+    from core.feedback import load_gate_state, gate_cohort_report
+    state = load_gate_state()
+    return {
+        "mode": getattr(settings, "swing_entry_mode", "strict"),
+        "gates": {g: state.get(g) for g in ("signals", "risk_reward", "entry_zone")},
+        "cohorts": gate_cohort_report(),
+        "history": state.get("history", []),
+    }
+
+
 @app.post("/api/feedback/exit/{ticker}")
 async def feedback_exit(ticker: str, exit_price: float = Query(...), reason: str = Query(default="manual")):
     """Record an exit outcome — links to open signal record for this ticker."""

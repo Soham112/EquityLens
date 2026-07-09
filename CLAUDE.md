@@ -20,7 +20,7 @@ Paper portfolios are **fully automated** (entries + exits) on both tracks. Real 
 
 Both compound independently. Exit proceeds return to cash (`p.cash += proceeds` on all exits/trims); next entries size off live total value.
 
-**Swing auto-entry criteria (all required):** 4+/7 signals AND chart entry_type in breakout/pullback/bounce (not "wait") AND R/R ≥ 2.0 AND price within 2% of entry zone. Uses chart-derived stop. Implemented in `growth_paper_trading.auto_enter_swing_signals()`, called by daily_scan.
+**Swing auto-entry criteria:** chart entry_type in breakout/pullback/bounce (not "wait") always required. Selection gates are ADAPTIVE (`settings.swing_entry_mode = "exploration"`, since 2026-07-08): each gate runs loose (3+/7 signals, R/R ≥ 1.2, zone +5%) until its own cohort evidence tightens it back to strict (4+/7, R/R ≥ 2.0, zone +2%). Entries failing any strict gate are tagged `strict:*` in their feedback record and sized 0.5x (probation). `feedback.adapt_swing_gates()` (called at the start of every auto-entry pass) self-tightens a gate when its cohort has ≥10 closed trades and hit rate <45% or avg return 3pts below the clean cohort — one-way ratchet, state in `data/swing_gate_state.json` (delete to reset loose), decisions logged in its `history`. Scoreboard: `/api/feedback/gates`. Risk controls (chart stop, 1.5% risk cap, earnings blackout, sector slots, cross-track dedup) are NEVER loosened. Implemented in `growth_paper_trading.auto_enter_swing_signals()`, called by daily_scan.
 
 **Long-term auto-entry:** every BUY signal from the orchestrator → `paper_trading.auto_execute_scan_signals()`. Paused during VIX spikes.
 
