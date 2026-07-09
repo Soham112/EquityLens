@@ -1475,6 +1475,46 @@
     }
   } catch(e) {}
 
+  // Shadow tracking (E8): what gate-blocked stocks did after we passed on them
+  try {
+    const shRes = await fetch('/api/feedback/shadow');
+    const sh = await shRes.json();
+    const gateNames = Object.keys(sh).filter(k => !['entered_buys','verdicts'].includes(k) && sh[k].signals > 0);
+    if ((sh.entered_buys && sh.entered_buys.signals > 0) || gateNames.length) {
+      html += '<div class="review-section"><h3>Shadow Tracking — the road not taken</h3>';
+      html += '<p style="font-size:12px;color:#9ca3af;margin:0 0 10px">Every stock a gate blocked from BUY is tracked as a shadow trade. If a gate\'s blocked stocks beat our entered BUYs over 90 days, that gate is costing money.</p>';
+      html += `<table style="width:100%;border-collapse:collapse;font-size:13px">
+        <thead><tr style="border-bottom:1px solid #e5e7eb;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:#6b7280">
+          <th style="text-align:left;padding:6px 4px">Cohort</th>
+          <th style="text-align:right;padding:6px 4px">Signals</th>
+          <th style="text-align:right;padding:6px 4px">Avg 30d</th>
+          <th style="text-align:right;padding:6px 4px">Avg 90d</th>
+          <th style="text-align:left;padding:6px 12px">Recent</th>
+        </tr></thead><tbody>`;
+      const row = (name, c, bold) => {
+        const fmt = v => v == null ? '—' : `<span style="color:${v >= 0 ? '#16a34a' : '#dc2626'}">${(v*100).toFixed(1)}%</span>`;
+        return `<tr style="border-bottom:1px solid #f3f4f6${bold ? ';background:#f9fafb;font-weight:600' : ''}">
+          <td style="padding:7px 4px">${name.replace(/_/g,' ')}</td>
+          <td style="padding:7px 4px;text-align:right">${c.signals}<span style="color:#9ca3af;font-size:11px"> (${c.scored_90d} scored)</span></td>
+          <td style="padding:7px 4px;text-align:right">${fmt(c.avg_return_30d)}</td>
+          <td style="padding:7px 4px;text-align:right">${fmt(c.avg_return_90d)}</td>
+          <td style="padding:7px 12px;color:#9ca3af;font-size:11px">${(c.tickers||[]).join(', ')}</td>
+        </tr>`;
+      };
+      html += row('entered_buys (baseline)', sh.entered_buys, true);
+      gateNames.forEach(g => { html += row(g, sh[g], false); });
+      html += '</tbody></table>';
+      (sh.verdicts || []).forEach(v => {
+        const costly = v.includes('BEAT');
+        html += `<div style="margin-top:10px;font-size:12px;border-radius:4px;padding:8px 12px;background:${costly ? '#fef2f2' : '#f0fdf4'};color:${costly ? '#dc2626' : '#16a34a'}">${costly ? '⚠' : '✓'} ${v}</div>`;
+      });
+      if (!(sh.verdicts || []).length) {
+        html += '<div style="margin-top:10px;font-size:12px;color:#9ca3af">Verdicts appear once a cohort has 15+ signals scored at 90 days.</div>';
+      }
+      html += '</div>';
+    }
+  } catch(e) {}
+
   if (!html) {
       html = '<div class="empty">Weekly review is clean — no alerts, no missed opportunities.</div>';
     }

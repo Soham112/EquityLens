@@ -62,6 +62,28 @@ that's what keeps this log honest.
 
 ---
 
+### E8 — LT shadow tracking: measure the road not taken
+- **Date started:** 2026-07-10
+- **Change:** every gate that demotes a BUY → WATCHLIST now stamps its name on the
+  signal (`demoted_by`: valuation_cap, macro_penalty, sector_gate, correlation_gate,
+  earnings_gate, vix_pause, conviction_trend, mistake_pattern). Demoted signals and
+  near-miss WATCHLISTs (conviction ≥7) are recorded in signal_outcomes.jsonl and
+  scored at 30/90d like real signals — shadow trades, zero capital at risk.
+  Scoreboard: `/api/feedback/shadow` + "Shadow Tracking" card on Weekly Review tab.
+- **Hypothesis:** LT gates are untested opinions, but unlike swing (E7) we don't need
+  live entries to test them — LT outcomes ≈ buy-and-hold, which a shadow measures.
+  Prime suspect: the Graham-formula valuation cap structurally punishes growth names
+  (AMD: conviction 9+, MOS −119%).
+- **How to judge (pre-registered):** per-gate cohort avg 90d return vs entered-BUY
+  cohort, minimum 15 scored signals per cohort. Blocked cohort beats entries by >2pts
+  → gate is costing money, recalibrate it (as its own experiment). Lags by >2pts →
+  gate earns its keep. Evidence-surfacing only — no auto-loosening of LT gates.
+- **Status: OBSERVING** — 16 shadow records backfilled from 2026-07-08/09 scans
+  (all valuation_cap: AMD, MRVL, TXN, BMY, MRK, EW, VRTX, VRT, ARM — entry prices
+  from signal-date closes). First 90d verdicts expected ~October 2026; 30d interim
+  reads ~August.
+  - _Weekly updates go here (cohort sizes | avg 30/90d vs baseline | verdicts)_
+
 ## Settled experiments
 
 ### E4 — Valuation cap must demote the signal, not just the number (BUG FIX)

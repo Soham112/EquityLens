@@ -41,6 +41,11 @@ class SignalOutcome:
     stop_price: Optional[float] = None    # tier-3 hard stop at signal time
     exit_reason: Optional[str] = None     # "stop" | "held" | None while pending
     sim_return: Optional[float] = None    # return at stop-out or at the 90d mark
+    # E8 shadow tracking: which gate(s) demoted this signal from BUY → WATCHLIST
+    # (valuation_cap, macro_penalty, sector_gate, ...). None = organic signal.
+    # The 30/90d scoring above turns every demotion into a "shadow trade" — we
+    # measure what the blocked stock did after we passed on it.
+    demoted_by: Optional[list] = None
 
 
 def _load_outcomes() -> list[SignalOutcome]:
@@ -105,6 +110,7 @@ def record_signal(result, chart_signal=None) -> None:
         sector=result.sector,
         entry_type=entry_type,
         stop_price=result.stop_tier3,
+        demoted_by=getattr(result, "demoted_by", None),
     )
 
     try:
@@ -394,3 +400,68 @@ def get_adaptive_weights() -> dict:
 
     logger.debug(f"[SignalTracker] Adaptive weights: {weights} (base: {BASE})")
     return weights
+
+
+# ── E8: Shadow gate tracking ──────────────────────────────────────────────────
+# Every gate-demoted signal is a "shadow trade": we record what the blocked
+# stock did over 30/90d and compare each gate's cohort against the BUYs we
+# actually entered. A gate whose blocked stocks consistently BEAT our entries
+# is costing money; one whose blocked stocks lag is earning its keep.
+# Pre-registered judgment (EXPERIMENTS.md E8): min 15 scored signals per cohort,
+# compare avg 90d return vs entered BUYs. Evidence-surfacing only — recalibrating
+# a gate stays a deliberate decision, logged as its own experiment entry.
+
+SHADOW_MIN_SCORED = 15
+
+
+def shadow_gate_report() -> dict:
+    """Per-gate shadow cohorts vs entered BUYs. Powers /api/feedback/shadow."""
+    outcomes = [o for o in _load_outcomes() if o.entry_price and o.entry_price > 0]
+
+    def stats(cohort: list) -> dict:
+        r30 = [o.return_30d for o in cohort if o.return_30d is not None]
+        r90 = [o.return_90d for o in cohort if o.return_90d is not None]
+        hits = [o.hit for o in cohort if o.hit is not None]
+        return {
+            "signals": len(cohort),
+            "scored_30d": len(r30),
+            "scored_90d": len(r90),
+            "avg_return_30d": round(sum(r30) / len(r30), 4) if r30 else None,
+            "avg_return_90d": round(sum(r90) / len(r90), 4) if r90 else None,
+            "hit_rate": round(sum(hits) / len(hits), 3) if hits else None,
+            "tickers": [o.ticker for o in cohort[-8:]],   # most recent few, for the dashboard
+        }
+
+    entered = [o for o in outcomes if o.signal == "BUY" and not o.demoted_by]
+    report = {"entered_buys": stats(entered)}
+
+    gates: dict[str, list] = {}
+    for o in outcomes:
+        for g in (o.demoted_by or []):
+            gates.setdefault(g, []).append(o)
+    for g, cohort in sorted(gates.items()):
+        report[g] = stats(cohort)
+
+    report["near_miss_conviction"] = stats(
+        [o for o in outcomes
+         if o.signal == "WATCHLIST" and not o.demoted_by and o.conviction >= 7.0])
+
+    # Verdict lines once a cohort clears the pre-registered threshold
+    verdicts = []
+    base = report["entered_buys"]["avg_return_90d"]
+    for name, c in report.items():
+        if name == "entered_buys" or not isinstance(c, dict):
+            continue
+        if c["scored_90d"] >= SHADOW_MIN_SCORED and base is not None and c["avg_return_90d"] is not None:
+            diff = c["avg_return_90d"] - base
+            if diff > 0.02:
+                verdicts.append(f"{name}: blocked stocks BEAT entered BUYs by {diff:+.1%} avg 90d "
+                                f"({c['scored_90d']} scored) — gate may be costing money, review it")
+            elif diff < -0.02:
+                verdicts.append(f"{name}: blocked stocks LAG entered BUYs by {diff:+.1%} avg 90d "
+                                f"({c['scored_90d']} scored) — gate is earning its keep")
+            else:
+                verdicts.append(f"{name}: no meaningful edge either way ({diff:+.1%} over "
+                                f"{c['scored_90d']} scored)")
+    report["verdicts"] = verdicts
+    return report

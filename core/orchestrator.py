@@ -60,6 +60,8 @@ class AnalysisResult:
     earnings_phase: str   # GAP 10: NORMAL | EARNINGS_WATCH | EARNINGS_CAUTION | EARNINGS_BLACKOUT
     days_to_earnings: Optional[int]   # None if unknown
     lt_chart: Optional[object] = None  # SwingChartSignal from long-term chart analysis (BUY only)
+    # E8 shadow tracking: gates that demoted this from BUY → WATCHLIST (None = organic)
+    demoted_by: Optional[list] = None
     # Upgrade 1: Intrinsic value gate
     fair_value_low: Optional[float] = None
     fair_value_high: Optional[float] = None
@@ -283,6 +285,9 @@ def analyze(
     # ── GAP 15: Sector gate — hard signal cap based on sector momentum ──
     conv_result = validator_result.conviction
     effective_signal = conv_result.signal
+    # E8 shadow tracking: every gate that demotes a BUY appends its name here;
+    # signal_tracker scores the demoted stock's 30/90d afterlife per gate cohort
+    demoted_by: list = []
 
     # ── Upgrade 1: Apply valuation conviction cap ──
     if valuation_result and valuation_result.conviction_cap is not None:
@@ -299,11 +304,13 @@ def analyze(
             # OVERVALUED cap to 7.0 must demote (was silently auto-buying capped names)
             if conv_result.conviction < 8 and effective_signal == "BUY":
                 effective_signal = "WATCHLIST"
+                demoted_by.append("valuation_cap")
                 alerts.append("Valuation gate: BUY → WATCHLIST (capped conviction below BUY threshold)")
     if sector_assessment.signal == "WAIT":
         # MAJOR_HEADWIND (sector down >25% in 60d) or BUBBLE: block new buys entirely
         if effective_signal == "BUY":
             effective_signal = "WATCHLIST"
+            demoted_by.append("sector_gate")
             alerts.append(
                 f"Sector gate: BUY → WATCHLIST — {sector_assessment.status} "
                 f"({sector_assessment.notes})"
@@ -318,6 +325,7 @@ def analyze(
         # HEADWIND (sector down 15-25%): no new buys; existing watchlists stay
         if effective_signal == "BUY":
             effective_signal = "WATCHLIST"
+            demoted_by.append("sector_gate")
             alerts.append(
                 f"Sector gate: BUY → WATCHLIST — {sector_assessment.status} "
                 f"({sector_assessment.notes})"
@@ -330,6 +338,7 @@ def analyze(
             corr_check = entry_correlation_check(ticker, sector, portfolio)
             if corr_check["block"]:
                 effective_signal = "WATCHLIST"
+                demoted_by.append("correlation_gate")
                 alerts.append(f"Correlation gate: BUY → WATCHLIST — {corr_check['warning']}")
             elif corr_check["warning"]:
                 alerts.append(f"Correlation warning: {corr_check['warning']}")
@@ -340,16 +349,19 @@ def analyze(
     if earnings.conviction_cap is not None and conv_result.conviction > earnings.conviction_cap:
         if effective_signal == "BUY":
             effective_signal = "WATCHLIST"
+            demoted_by.append("earnings_gate")
             alerts.append(
                 f"Signal downgraded BUY → WATCHLIST: earnings {earnings.phase.value} "
                 f"({earnings.days_to_earnings}d out)"
             )
     elif earnings.block_new_buy and effective_signal == "BUY":
         effective_signal = "WATCHLIST"
+        demoted_by.append("earnings_gate")
 
     # ── GAP 7: Block new buys on VIX spike ──
     if regime.new_buys_paused and effective_signal == "BUY":
         effective_signal = "WATCHLIST"
+        demoted_by.append("vix_pause")
 
     # ── GAP 12: Conviction drop response for held positions ──
     drop_result = None
@@ -380,6 +392,7 @@ def analyze(
                 # Re-evaluate signal after penalty — same rule as valuation/macro gates
                 if conv_result.conviction < 8 and effective_signal == "BUY":
                     effective_signal = "WATCHLIST"
+                    demoted_by.append("conviction_trend")
                     alerts.append("Conviction trend: BUY → WATCHLIST (adjusted conviction below BUY threshold)")
     except Exception:
         pass
@@ -401,6 +414,7 @@ def analyze(
         # Re-evaluate signal after penalty
         if conv_result.conviction < 8 and effective_signal == "BUY":
             effective_signal = "WATCHLIST"
+            demoted_by.append("macro_penalty")
 
     # ── Mistake-pattern penalty: learned from our own closed losses ──
     # Same design as the macro penalty: bounded, evidence-gated, and only
@@ -421,6 +435,7 @@ def analyze(
                 )
                 if conv_result.conviction < 8:
                     effective_signal = "WATCHLIST"
+                    demoted_by.append("mistake_pattern")
         except Exception as e:
             logger.warning(f"Mistake-pattern penalty check failed for {ticker}: {e}")
 
@@ -549,6 +564,7 @@ def analyze(
         fair_value_high=valuation_result.fair_value_high if valuation_result else None,
         margin_of_safety=valuation_result.margin_of_safety if valuation_result else None,
         macro_headwinds=macro_headwinds if macro_headwinds else None,
+        demoted_by=demoted_by or None,
     )
 
 

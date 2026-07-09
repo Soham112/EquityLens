@@ -797,6 +797,15 @@ async def feedback_mistakes():
     return {"mistakes": [asdict(m) for m in mistake_report()]}
 
 
+@app.get("/api/feedback/shadow")
+async def feedback_shadow():
+    """E8 shadow tracking: gate-demoted signal cohorts vs entered BUYs (30/90d)."""
+    import sys
+    sys.path.insert(0, str(Path(__file__).parent.parent))
+    from core.signal_tracker import shadow_gate_report
+    return shadow_gate_report()
+
+
 @app.get("/api/feedback/gates")
 async def feedback_gates():
     """Exploration-mode gate state + per-gate cohort scoreboard + adaptation history."""

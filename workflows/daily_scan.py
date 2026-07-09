@@ -330,14 +330,21 @@ def run_daily_scan(
     # Log all BUY signals for outcome tracking
     auto_log_scan_signals(results)
 
-    # Upgrade 5: Record signals in signal_tracker for adaptive weight feedback
+    # Upgrade 5: Record signals in signal_tracker for adaptive weight feedback.
+    # E8 shadow tracking: also record gate-demoted signals and near-miss
+    # WATCHLISTs (conviction >= 7) — their 30/90d outcomes measure what the
+    # blocked/skipped stocks did after we passed (shadow trades).
     try:
         from core.signal_tracker import record_signal
-        buy_results = [r for r in results if r.signal == "BUY"]
-        for r in buy_results:
+        tracked = [r for r in results if r.signal == "BUY"
+                   or getattr(r, "demoted_by", None)
+                   or (r.signal == "WATCHLIST" and r.conviction >= 7.0)]
+        for r in tracked:
             record_signal(r)
-        if buy_results:
-            logger.info(f"[SignalTracker] Recorded {len(buy_results)} BUY signals")
+        if tracked:
+            n_buy = sum(1 for r in tracked if r.signal == "BUY")
+            logger.info(f"[SignalTracker] Recorded {n_buy} BUY + "
+                        f"{len(tracked) - n_buy} shadow (demoted/near-miss) signals")
     except Exception as e:
         logger.debug(f"[SignalTracker] record_signal skipped: {e}")
 
