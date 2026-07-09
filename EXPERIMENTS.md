@@ -195,10 +195,23 @@ that's what keeps this log honest.
     caps $ risk via stop distance, so wider stop = smaller position anyway.
   - Tighter floor (2.0×ATR) worse; earlier trail worse (cuts winners); 21d time
     stop much worse (+0.64%) — swing winners need more than 21 days.
-- **Status: OBSERVING → candidate change identified, NOT applied.** Before any
-  production change: re-run Part B split by era (2022-23 vs 2024-26) to check the
-  S1-only and no-stall findings are stable, then decide as its own experiment.
-  Production exits unchanged today.
+- **Era-split stability check (2026-07-09):**
+  - **"S1 only" STABLE — passes.** Beats live on avg AND median AND win rate in
+    BOTH eras: 2022-23 (+0.45%/+0.20%/52.5% vs live +0.31%/−0.24%/48.2%) and
+    2024-26 (+1.89%/+0.53%/53.5% vs +1.50%/−0.02%/49.7%). Candidate production
+    change (needs user decision): stop = S1−0.5×ATR primary, 2.5×ATR only as
+    fallback when no tested S1 exists — i.e., remove the floor's override.
+  - **"No stall exit" REGIME-DEPENDENT — fails.** Its overall win was all
+    2024-26 bull (+2.36%); in 2022-23 it did +0.13% at 32% win — worse than live.
+    The stall exit earns its keep in bear/chop. KEEP. (Equal-thirds trap caught
+    again by the split.)
+  - Vision-agent prep for the sampled backtest: pattern vocabulary expanded to 18
+    (incl. inverse H&S, symmetrical triangle, triple top/bottom, wedges, pennant,
+    rounding bottom, flat base) + anti-bias discipline rules (bearish patterns
+    weigh equally; "none" is honest; conflict → wait). Production prompt and
+    backtest prompt are now the same thing being tested.
+- **Status: OBSERVING.** S1-only change awaiting user decision; vision sample
+  (~$5, ~350-400 charts) approved and queued.
 
 ## Settled experiments
 
