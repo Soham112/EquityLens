@@ -67,8 +67,9 @@ def _composite(vs_spy_60d: float, accel: float, breadth: float,
     return ret_score * w_ret + accel_score * w_accel + breadth_score * w_breadth
 
 
-def run_backtest() -> dict:
-    import numpy as np
+def _build_weekly():
+    """Shared replay: weekly feature/ranking/forward-return records + close df.
+    Used by run_backtest() and walk_forward()."""
     import pandas as pd
     import yfinance as yf
 
@@ -131,6 +132,12 @@ def run_backtest() -> dict:
             "spy_fwd_1w": fwd("SPY", i, 5),
         }
         weekly.append(rec)
+    return weekly, close, sectors
+
+
+def run_backtest() -> dict:
+    weekly, close, sectors = _build_weekly()
+    import pandas as pd
 
     # ── Hit metrics (weeks where 4w forward data exists) ──
     scored = [w for w in weekly if all(v is not None for v in w["fwd_4w"].values())]
@@ -309,3 +316,69 @@ def load_or_run(refresh: bool = False) -> dict:
         except Exception:
             pass
     return run_backtest()
+
+
+def walk_forward(top_k: int = 5) -> dict:
+    """
+    Out-of-sample validation of the weight grid (E9 follow-up).
+
+    Two views, evaluated on top-`top_k` baskets (production is moving to top-5):
+      1. Consistency table — each combo's avg forward-4w return per calendar year.
+         A real edge wins in most years; a lucky fit wins one year big.
+      2. Walk-forward selection — for each test year, pick the combo that won the
+         PRIOR two years, then measure it on the test year it never saw.
+
+    Pre-registered rule (set before running): a challenger replaces the live
+    50/30/20 only if it beats it in >= 3 of the 4 test years (2023-2026) AND by
+    >= 0.10%/4w on average across them.
+    """
+    weekly, close, sectors = _build_weekly()
+    scored = [w for w in weekly if all(v is not None for v in w["fwd_4w"].values())]
+
+    def basket_ret(w, wr, wa, wb):
+        sc = {s: _composite(*w["features"][s], wr, wa, wb) for s in sectors}
+        top = sorted(sectors, key=lambda s: -sc[s])[:top_k]
+        return sum(w["fwd_4w"][s] for s in top) / top_k
+
+    years = sorted({w["date"][:4] for w in scored})
+    by_year = {y: [w for w in scored if w["date"][:4] == y] for y in years}
+
+    # 1. per-year consistency table
+    table = {}
+    for name, wr, wa, wb in WEIGHT_GRID:
+        table[name] = {y: round(sum(basket_ret(w, wr, wa, wb) for w in by_year[y]) / len(by_year[y]), 4)
+                       for y in years if by_year[y]}
+
+    # 2. walk-forward selection (train = prior 2 years)
+    test_years = [y for y in years if y >= "2023"]
+    wf_picks, wf_ret, live_ret = [], [], []
+    for ty in test_years:
+        train = [w for w in scored if str(int(ty) - 2) <= w["date"][:4] < ty]
+        best = max(WEIGHT_GRID,
+                   key=lambda g: sum(basket_ret(w, g[1], g[2], g[3]) for w in train) / len(train))
+        t_recs = by_year[ty]
+        wf_picks.append({"year": ty, "picked": best[0],
+                         "test_avg": round(sum(basket_ret(w, best[1], best[2], best[3]) for w in t_recs) / len(t_recs), 4)})
+        wf_ret.append(wf_picks[-1]["test_avg"])
+        live_ret.append(table["live 50/30/20"][ty])
+
+    # Pre-registered verdict per challenger
+    verdicts = []
+    live_row = table["live 50/30/20"]
+    for name, *_ in WEIGHT_GRID:
+        if name == "live 50/30/20":
+            continue
+        wins = sum(1 for y in test_years if table[name][y] > live_row[y])
+        margin = sum(table[name][y] - live_row[y] for y in test_years) / len(test_years)
+        passed = wins >= 3 and margin >= 0.0010
+        verdicts.append({"combo": name, "years_beating_live": f"{wins}/{len(test_years)}",
+                         "avg_margin_4w": round(margin, 4), "ADOPT": passed})
+
+    return {
+        "top_k": top_k,
+        "per_year_table": table,
+        "walk_forward": {"picks": wf_picks,
+                         "wf_avg": round(sum(wf_ret) / len(wf_ret), 4),
+                         "live_avg": round(sum(live_ret) / len(live_ret), 4)},
+        "verdicts": sorted(verdicts, key=lambda v: -v["avg_margin_4w"]),
+    }
