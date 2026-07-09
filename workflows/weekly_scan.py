@@ -73,6 +73,7 @@ def run_weekly_scan() -> dict:
     # long-history check (19/27 years, +0.17%/4w in crisis years) but stays
     # shadow until the live race graduates it.
     accel_radar: list[str] = []
+    radar_candidates: list[str] = []
     try:
         from core.sector_backtest import log_weekly_ranking, _load_ranking_log
         entry = log_weekly_ranking() or (_load_ranking_log() or [None])[-1]
@@ -82,8 +83,31 @@ def run_weekly_scan() -> dict:
     except Exception as e:
         logger.warning(f"[E9] accel radar failed: {e}")
 
+    # E10 radar probe: for each flagged sector, deep-scan its STRONGEST
+    # microsector's stocks this week. The radar buys these an audition, never a
+    # bypass — same 7-agent pipeline, same conviction bar, same gates. Tagged
+    # source="radar" in signal records so their hit rate is measurable.
+    if accel_radar:
+        try:
+            from agents.scout import scan_microsectors
+            micro = scan_microsectors(accel_radar)
+            for sector in accel_radar:
+                cands = {n: a for n, a in micro.items()
+                         if MICRO_SECTORS.get(n, {}).get("macro") == sector}
+                if not cands:
+                    continue
+                best = max(cands, key=lambda n: cands[n].composite_score)
+                stocks = MICRO_SECTORS.get(best, {}).get("stocks", [])
+                radar_candidates += [t for t in stocks if t not in all_stocks
+                                     and t not in radar_candidates]
+                logger.info(f"[E10] radar probe: {sector} → {best} → {stocks}")
+            all_stocks = list(dict.fromkeys(all_stocks + radar_candidates))
+        except Exception as e:
+            logger.warning(f"[E10] radar probe failed: {e}")
+
     output = {
         "accel_radar": accel_radar,
+        "radar_candidates": radar_candidates,
         "date": today,
         "top_macro_sectors": universe.top_macro_sectors,
         "top_microsectors": universe.top_microsectors,
@@ -140,6 +164,8 @@ def _print_summary(output: dict):
     if output.get("accel_radar"):
         print(f"⚡ ACCEL RADAR (accelerating, outside our top-5 — watch, don't chase): "
               f"{', '.join(output['accel_radar']).upper()}")
+        if output.get("radar_candidates"):
+            print(f"   probe candidates auditioning this week: {', '.join(output['radar_candidates'])}")
 
     micro_scores = output["sector_scores"].get("micro", {})
     for macro in output["top_macro_sectors"]:

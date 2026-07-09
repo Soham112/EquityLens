@@ -46,6 +46,9 @@ class SignalOutcome:
     # The 30/90d scoring above turns every demotion into a "shadow trade" — we
     # measure what the blocked stock did after we passed on it.
     demoted_by: Optional[list] = None
+    # E10: how the ticker got into the scan universe. None = sector funnel;
+    # "radar" = accel-radar probe candidate (audition — same gates apply)
+    source: Optional[str] = None
 
 
 def _load_outcomes() -> list[SignalOutcome]:
@@ -71,11 +74,12 @@ def _save_outcomes(outcomes: list[SignalOutcome]) -> None:
             f.write(json.dumps(asdict(o)) + "\n")
 
 
-def record_signal(result, chart_signal=None) -> None:
+def record_signal(result, chart_signal=None, source: Optional[str] = None) -> None:
     """
     Record a BUY or WATCHLIST signal for outcome tracking.
     result: AnalysisResult from orchestrator
     chart_signal: optional SwingChartSignal or similar with .entry_type
+    source: "radar" when the ticker entered the universe via the accel-radar probe
     """
     if result.signal not in ("BUY", "WATCHLIST"):
         return
@@ -111,6 +115,7 @@ def record_signal(result, chart_signal=None) -> None:
         entry_type=entry_type,
         stop_price=result.stop_tier3,
         demoted_by=getattr(result, "demoted_by", None),
+        source=source,
     )
 
     try:
@@ -445,6 +450,9 @@ def shadow_gate_report() -> dict:
     report["near_miss_conviction"] = stats(
         [o for o in outcomes
          if o.signal == "WATCHLIST" and not o.demoted_by and o.conviction >= 7.0])
+
+    # E10: radar-probe cohort — did accel-radar-sourced candidates earn their audition?
+    report["radar_sourced"] = stats([o for o in outcomes if o.source == "radar"])
 
     # Verdict lines once a cohort clears the pre-registered threshold
     verdicts = []

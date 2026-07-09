@@ -148,6 +148,24 @@ that's what keeps this log honest.
 - **Status: OBSERVING (Phase 2 live race running — now refereeing live 50/30/20
   vs accel-only as the surviving challenger; top-5 cutoff settled).**
 
+### E10 — Accel-radar probe: flagged sectors get an audition, not a bypass
+- **Date started:** 2026-07-09
+- **Change:** each Sunday, for every radar sector (accel-only top-3 outside the
+  production top-5), the strongest microsector's stocks join the weekly deep-scan
+  universe as probe candidates (`radar_candidates` in the universe file, shown in
+  the funnel's ⚡ callout). Same 7-agent pipeline, same conviction bar, same gates.
+  Signal records tagged `source="radar"`; cohort visible as `radar_sourced` in
+  `/api/feedback/shadow`.
+- **Hypothesis:** radar sectors averaged +1.48%/4w vs +1.11% for production's own
+  top-5 (2021-26, 431 sector-weeks) — the best-performing group was the one we
+  never analyzed. Radar width stays top-3: accel ranks 4-5 decay to +1.27%.
+- **How to judge (pre-registered):** after ≥15 scored radar-sourced signals,
+  compare hit rate and avg 90d return vs funnel-sourced signals. Match-or-beat →
+  keep (consider widening probe). Clearly worse → sector-level edge doesn't
+  survive stock selection; drop the probe, keep the watch-only callout.
+- **Status: OBSERVING** — first probe queued for Sunday 2026-07-12:
+  materials → metals_mining → FCX, NEM, GOLD, AA, CLF, MP.
+
 ## Settled experiments
 
 ### E4 — Valuation cap must demote the signal, not just the number (BUG FIX)

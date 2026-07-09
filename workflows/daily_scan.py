@@ -336,11 +336,20 @@ def run_daily_scan(
     # blocked/skipped stocks did after we passed (shadow trades).
     try:
         from core.signal_tracker import record_signal
+        # E10: tickers that entered the universe via the accel-radar probe get
+        # source="radar" so their outcomes are comparable to funnel-sourced ones
+        radar_set: set = set()
+        try:
+            from workflows.weekly_scan import load_weekly_universe
+            radar_set = set((load_weekly_universe() or {}).get("radar_candidates", []))
+        except Exception:
+            pass
         tracked = [r for r in results if r.signal == "BUY"
                    or getattr(r, "demoted_by", None)
-                   or (r.signal == "WATCHLIST" and r.conviction >= 7.0)]
+                   or (r.signal == "WATCHLIST" and r.conviction >= 7.0)
+                   or r.ticker in radar_set]
         for r in tracked:
-            record_signal(r)
+            record_signal(r, source="radar" if r.ticker in radar_set else None)
         if tracked:
             n_buy = sum(1 for r in tracked if r.signal == "BUY")
             logger.info(f"[SignalTracker] Recorded {n_buy} BUY + "
