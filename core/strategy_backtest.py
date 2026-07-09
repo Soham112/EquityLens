@@ -161,7 +161,7 @@ def screener_backtest(raw=None, tickers=None) -> dict:
                 for s, hit in fired.items():
                     per_signal[s]["fired_fwd21" if hit else "quiet_fwd21"].append(f21)
                 if n >= 2:
-                    entries.append((t, i, n))
+                    entries.append((t, i, n, d.date().isoformat()))
         except Exception:
             continue
 
@@ -249,7 +249,7 @@ def exit_backtest(entries, raw) -> dict:
     results = {name: [] for name in EXIT_VARIANTS}
     reasons = {name: {} for name in EXIT_VARIANTS}
     arrays = {}
-    for t, i, n_sig in entries:
+    for t, i, n_sig, date in entries:
         if t not in arrays:
             df = raw[t].dropna(subset=["Close"])
             arrays[t] = (df["Close"].values, df["Low"].values,
@@ -269,35 +269,46 @@ def exit_backtest(entries, raw) -> dict:
         s1 = _s1_support(lows, i, closes[i])
         for name, cfg in EXIT_VARIANTS.items():
             r, hold, why = _simulate(closes, lows, vols, v90s, i, cfg, s1, atr)
-            results[name].append((r, hold))
+            results[name].append((r, hold, date))
             reasons[name][why] = reasons[name].get(why, 0) + 1
 
-    report = {}
-    for name, rs in results.items():
-        if not rs:
-            continue
-        rets = [r for r, _ in rs]
-        holds = [h for _, h in rs]
-        report[name] = {
+    def summarize(rs):
+        rets = [r for r, _, _ in rs]
+        holds = [h for _, h, _ in rs]
+        return {
             "trades": len(rets),
             "avg_return": round(float(np.mean(rets)), 4),
             "median_return": round(float(np.median(rets)), 4),
             "win_rate": round(float(np.mean([r > 0 for r in rets])), 3),
             "avg_hold_days": round(float(np.mean(holds)), 1),
             "worst": round(float(min(rets)), 4),
-            "exit_reasons": reasons[name],
         }
-    return report
+
+    report, by_era = {}, {}
+    # Era-split stability check: a rule change must hold in the 2022-23 bear/chop
+    # AND the 2024-26 bull separately — one regime doing all the work is the
+    # equal-thirds trap (see E9 long-history lesson).
+    eras = [("2022-2023", lambda d: d < "2024-01-01"),
+            ("2024-2026", lambda d: d >= "2024-01-01")]
+    for name, rs in results.items():
+        if not rs:
+            continue
+        report[name] = {**summarize(rs), "exit_reasons": reasons[name]}
+        by_era[name] = {era: summarize([x for x in rs if cond(x[2])])
+                        for era, cond in eras
+                        if any(cond(x[2]) for x in rs)}
+    return report, by_era
 
 
 def run_all() -> dict:
     screener, entries, raw = screener_backtest()
-    exits = exit_backtest(entries, raw)
+    exits, exits_by_era = exit_backtest(entries, raw)
     result = {
         "generated_at": datetime.datetime.now().isoformat(timespec="seconds"),
         "window": {"first_signal": FIRST_SIGNAL, "fwd_cap_days": FWD_MAX},
         "screener": screener,
         "exit_engine": exits,
+        "exit_engine_by_era": exits_by_era,
         "n_candidate_entries": len(entries),
     }
     os.makedirs("data", exist_ok=True)

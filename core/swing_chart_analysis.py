@@ -357,14 +357,14 @@ The chart shows: candlesticks, MA20 (blue), MA50 (orange), volume panel, RSI(14)
 Classify the current swing setup and return valid JSON:
 {{
   "entry_type": "<breakout|pullback|bounce|wait>",
-  "pattern": "<cup_and_handle|ascending_triangle|descending_triangle|bull_flag|bear_flag|head_and_shoulders|double_bottom|double_top|wedge|channel|none>",
+  "pattern": "<cup_and_handle|ascending_triangle|descending_triangle|symmetrical_triangle|bull_flag|bear_flag|pennant|head_and_shoulders|inverse_head_and_shoulders|double_bottom|double_top|triple_bottom|triple_top|rising_wedge|falling_wedge|rounding_bottom|flat_base|channel|none>",
   "pattern_confidence": <0.0–1.0>,
   "entry_zone_low": <price — low end of ideal buy zone>,
   "entry_zone_high": <price — high end of ideal buy zone>,
   "stop_level": <price — where thesis is wrong, exit immediately>,
   "target_level": <price — first realistic target at next resistance>,
   "risk_reward": <float — (target - entry_mid) / (entry_mid - stop)>,
-  "chart_thesis": "<2-3 sentences: what pattern, where price is relative to S/R and MAs, why this entry type, what confirms the trade>"
+  "chart_thesis": "<2-3 sentences: what pattern, where price is relative to S/R and MAs, why this entry type, what confirms the trade — AND the strongest bearish counter-argument if one exists>"
 }}
 
 Entry type rules:
@@ -372,6 +372,15 @@ Entry type rules:
 - pullback: price broke out, pulled back to prior resistance (now support) or MA20
 - bounce: price sitting AT support level, beginning to turn up with RSI not oversold
 - wait: price mid-range between S/R, no clean setup, or RSI >75 (extended), or below MA20
+
+Discipline rules (read carefully):
+- Weigh BEARISH patterns (head_and_shoulders, double/triple_top, rising_wedge,
+  bear_flag, descending_triangle) as seriously as bullish ones — a bearish pattern
+  or broken support means entry_type "wait", never force a bullish read
+- "none" is an honest and acceptable pattern — do NOT invent a pattern to justify
+  an entry; a clean setup can exist without a textbook pattern and vice versa
+- If bullish and bearish evidence conflict, the verdict is "wait" and the thesis
+  must name the conflict
 
 Only return JSON."""
 
