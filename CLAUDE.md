@@ -1,5 +1,15 @@
 # EquityLens — AI Equity Research Platform
 
+## Experiment log — read before changing trading logic
+
+**EXPERIMENTS.md** is the living record of every behavioral change: hypothesis,
+pre-registered success measure, evidence, verdict (OBSERVING/WORKED/FAILED/
+SELF-TIGHTENED). Before changing any gate, threshold, or scoring rule, check it —
+the change may already be a settled experiment or an open question (N1-N5).
+When you change trading logic, ADD AN ENTRY in the same commit (with a "how to
+judge" written before the data comes in). The Sunday weekly-review task re-scores
+OBSERVING entries with each week's evidence.
+
 ## Philosophy
 Paper portfolios are **fully automated** (entries + exits) on both tracks. Real trades are executed manually by the user after reviewing signals. Goal: build a precise track record in paper mode, then act on it with confidence.
 
