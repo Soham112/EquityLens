@@ -316,3 +316,109 @@ def run_all() -> dict:
         json.dump(result, f, indent=1)
     logger.info(f"[StratBT] saved → {CACHE_FILE}")
     return result
+
+
+# ── E14: Minervini Trend Template + RS-percentile backtest (2016-2026) ─────────
+# Replays the full 8-point Trend Template weekly and compares its cohort against
+# (a) all prefilter passers and (b) our current price_structure check.
+# 10y window per user decision: 5 regimes (2016-17 bull, 2018 crash, 2019 bull,
+# 2020 COVID, 2021 bull, 2022 bear, 2023 chop, 2024-26 bull) with tolerable
+# survivorship; cohort comparisons partially cancel survivor inflation.
+# Pre-registered: template cohort must beat BOTH baselines on fwd21 in a
+# majority of years INCLUDING at least one down year (2018 or 2022).
+
+def trend_template_backtest() -> dict:
+    import numpy as np
+    import pandas as pd
+    import yfinance as yf
+    from core.universe import load_universe
+
+    uni = load_universe()
+    tickers = sorted({t for t, _ in uni})
+    logger.info(f"[E14] downloading {len(tickers)} tickers from 2015-01-01...")
+    raw = yf.download(tickers + ["SPY"], start="2015-01-01", progress=False,
+                      auto_adjust=True, group_by="ticker", threads=True)
+    spy = raw["SPY"]["Close"].dropna()
+    idx = spy.index
+    week_last = spy.groupby([idx.isocalendar().year, idx.isocalendar().week]).tail(1).index
+    snap_dates = [d for d in week_last
+                  if d >= pd.Timestamp("2016-01-01") and d <= idx[-1] - pd.Timedelta(days=35)]
+
+    # pass 1: per-ticker indicator frames
+    frames = {}
+    for t in tickers:
+        try:
+            df = raw[t].dropna(subset=["Close"])
+            if len(df) < 320:
+                continue
+            c = df["Close"]
+            f = pd.DataFrame(index=df.index)
+            f["close"] = c
+            f["ma50"] = c.rolling(50).mean()
+            f["ma150"] = c.rolling(150).mean()
+            f["ma200"] = c.rolling(200).mean()
+            f["ma200_1m_ago"] = f["ma200"].shift(21)
+            f["lo52"] = c.rolling(252).min()
+            f["hi52"] = c.rolling(252).max()
+            f["ret3m"] = c.pct_change(63)
+            frames[t] = f
+        except Exception:
+            continue
+
+    # pass 2: per snapshot, build cross-sectional RS ranks + cohorts
+    cohorts = {"template_pass": [], "current_structure": [], "all_passers": []}
+    by_year = {}
+    for d in snap_dates:
+        rows = {}
+        for t, f in frames.items():
+            if d not in f.index:
+                continue
+            i = f.index.get_loc(d)
+            r = f.iloc[i]
+            if any(pd.isna(r[k]) for k in ("ma50", "ma150", "ma200", "ma200_1m_ago",
+                                           "lo52", "hi52", "ret3m")):
+                continue
+            if i + 21 >= len(f):
+                continue
+            fwd21 = float(f["close"].iloc[i + 21] / r["close"] - 1)
+            rows[t] = (r, fwd21)
+        if len(rows) < 50:
+            continue
+        rets = sorted(v[0]["ret3m"] for v in rows.values())
+        n = len(rets)
+        year = str(d.year)
+        for t, (r, fwd21) in rows.items():
+            price = r["close"]
+            rs_pct = np.searchsorted(rets, r["ret3m"]) / n * 100
+            template = (price > r["ma50"] > r["ma150"] > r["ma200"]
+                        and r["ma200"] > r["ma200_1m_ago"]
+                        and price >= 1.30 * r["lo52"]
+                        and price >= 0.75 * r["hi52"]
+                        and rs_pct >= 70)
+            structure = (price / r["hi52"] - 1) >= -0.08 and \
+                        price > r["ma50"] > r["ma200"] and r["ma200"] > r["ma200_1m_ago"]
+            rec = (fwd21, year)
+            cohorts["all_passers"].append(rec)
+            if template:
+                cohorts["template_pass"].append(rec)
+            if structure:
+                cohorts["current_structure"].append(rec)
+        by_year[year] = True
+
+    def stats(rows):
+        if not rows:
+            return {"n": 0}
+        v = [x[0] for x in rows]
+        return {"n": len(v), "avg": round(float(np.mean(v)), 4),
+                "median": round(float(np.median(v)), 4),
+                "win_rate": round(float(np.mean([x > 0 for x in v])), 3)}
+
+    years = sorted(by_year)
+    report = {"window": f"{snap_dates[0].date()} → {snap_dates[-1].date()}",
+              "overall": {k: stats(v) for k, v in cohorts.items()},
+              "per_year": {y: {k: stats([x for x in v if x[1] == y])
+                               for k, v in cohorts.items()} for y in years}}
+    os.makedirs("data", exist_ok=True)
+    with open("data/trend_template_backtest.json", "w") as f:
+        json.dump(report, f, indent=1)
+    return report

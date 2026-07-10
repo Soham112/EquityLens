@@ -279,6 +279,30 @@ that's what keeps this log honest.
   n≥50 with fwd10+ windows.
 - **Status: OBSERVING (free grading weekly; paid bear-era study deferred).**
 
+### E14 — Minervini Trend Template backtest (2016-2026, 10y per user decision)
+- **Date:** 2026-07-10. `trend_template_backtest()` — full 8-point template
+  (price > MA50 > MA150 > MA200, MA200 rising 1mo, ≥30% above 52w low, within
+  25% of 52w high, RS percentile ≥70 cross-sectional) replayed weekly,
+  234k stock-week observations, per-year cohorts. Survivorship noted (today's
+  constituents); cohort comparisons partially cancel it.
+- **Pre-registered rule:** template cohort must beat BOTH baselines (current
+  price_structure check AND all prefilter passers) on fwd21 in a majority of
+  years incl. one down year. **RESULT: FAILED** — beat both in only 4/11 years.
+- **But the split verdict matters:**
+  - vs our CURRENT structure check: template won **11/11 years** (incl. both
+    down years: 2018 +0.01% vs −0.61%; 2022 −0.87% vs −1.70%). It is a strictly
+    better version of what price_structure tries to be.
+  - vs simply taking every prefilter passer: no 21-day edge (+1.50% vs +1.54%
+    avg) — at the month scale, selectivity itself isn't alpha (consistent with
+    E11's flat signal-count finding). Caveat: fwd21 grades a marathon runner on
+    a sprint — the template targets months-long runs; a fwd63 check is the
+    fair test before any production signal change.
+- **Decision:** adopt the template as the LAYER-1 DISCOVERY SCREEN for the
+  small/mid-cap expansion (its true Minervini purpose: narrowing ~1,000 names
+  to a research shortlist — there it must only beat our structure check, which
+  it does 11/11). NO change to the live price_structure signal yet (queue:
+  re-test at fwd63 before considering replacement).
+
 ## Settled experiments
 
 ### E4 — Valuation cap must demote the signal, not just the number (BUG FIX)
