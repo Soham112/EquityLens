@@ -44,10 +44,22 @@ MICRO_SECTORS = {
         "stocks": ["NVDA", "AMD", "AVGO", "ARM", "MRVL", "SMCI", "VRT", "DELL"],
     },
     "memory_storage": {
+        # etf was None → scout silently SKIPPED this micro since creation (found
+        # 2026-07-09 adding ai_photonics); MU = largest pure-play price proxy
         "macro": "technology",
-        "etf": None,
+        "etf": "MU",
         "proxy_stock": "MU",
         "stocks": ["MU", "WDC", "STX", "AMAT"],
+    },
+    "ai_photonics": {
+        # optical interconnects / photonics for AI datacenters — added 2026-07-09
+        # (was a funnel blind spot: LITE/COHR/CIEN were swing-scannable but no
+        # microsector meant the weekly funnel and LT track never saw the theme)
+        "macro": "technology",
+        # no liquid pure-photonics ETF exists; LITE (largest pure-play) is the
+        # price proxy — scout SKIPS etf=None micros entirely, it does not proxy
+        "etf": "LITE",
+        "stocks": ["LITE", "COHR", "CIEN", "FN", "MRVL", "ANET"],
     },
     "cloud_saas": {
         "macro": "technology",
@@ -116,6 +128,15 @@ MICRO_SECTORS = {
         "macro": "industrials",
         "etf": "PAVE",
         "stocks": ["CAT", "DE", "VMC", "MLM", "PWR", "CARR", "TT"],
+    },
+    "power_grid": {
+        # electrification / AI-power buildout — added 2026-07-09: the theme was
+        # scattered across nuclear (CEG/VST), ai_infrastructure (VRT), utilities
+        # and infrastructure (PWR); GEV/ETN belonged to no microsector at all,
+        # so the funnel could never rank "power" as one unit
+        "macro": "industrials",
+        "etf": "GRID",
+        "stocks": ["GEV", "ETN", "VRT", "PWR", "HUBB", "CEG", "VST"],
     },
 
     # ── Consumer Discretionary ──

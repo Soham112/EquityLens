@@ -39,6 +39,10 @@ GROWTH_UNIVERSE: list[tuple[str, str]] = [
     ("SITM",  "semiconductors"),    # SiTime — precision timing semiconductors
     ("SMTC",  "semiconductors"),    # Semtech — IoT/data center signal integrity chips
 
+    # ── AI Photonics (optical interconnects for AI datacenters) ──
+    ("AAOI",  "ai_photonics"),      # Applied Optoelectronics — optical transceivers
+    ("POET",  "ai_photonics"),      # POET Technologies — optical interposers for AI
+
     # ── AI Software & Infrastructure ──
     ("BBAI",  "ai_infrastructure"), # BigBear.ai — AI analytics for defense/government
     ("CXAI",  "ai_infrastructure"), # CXApp — AI workplace intelligence

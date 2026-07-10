@@ -90,7 +90,7 @@ core/
                          Liquidity filter → ~450 tickers cached 7d in data/universe_cache.json
                          (format: {fetched_date, count, entries: [{ticker, sector}]})
   bias_check.py          Behavioral bias checkpoints: FOMO, recency, loss aversion, overconfidence, anchoring
-  sector_map.py          Single source of truth: 10 macro sectors, 24 microsectors, 14 wildcards
+  sector_map.py          Single source of truth: 10 macro sectors, 26 microsectors, 14 wildcards
   screener.py            Swing prefilter + 7-signal screener + adaptive sizing (see Swing section)
   momentum_monitor.py    Daily exit checker for open swings — position_store AND growth portfolio
                          positions. Checks: stop, stall, thesis break, earnings ≤5d (decision prompt)
@@ -221,7 +221,7 @@ as a separate entry point.
 
 ## Sector Map (core/sector_map.py)
 
-10 macro sectors → 24 microsectors + 14 wildcards. Used by the weekly funnel (scout.py).
+10 macro sectors → 26 microsectors + 14 wildcards. Used by the weekly funnel (scout.py).
 Sector scoring vs SPY: composite = 50% relative_return_60d + 30% momentum_accel + 20% volume_breadth
 → LEADING/MIDDLE/LAGGING → top 5 macro (was 3 — E9 backtest decision 2026-07-09) → microsectors
 → ~100 weekly candidates. Weight formula unchanged pending the E9 Phase 2 live race:
