@@ -176,7 +176,7 @@ candidates with ≥2 signals (~60-100 in earnings season)
 |---|---|---|
 | volume_accumulation | 20d vol ≥1.2x 90d avg | numerical |
 | relative_strength | outperforming sector ETF / SPY | |
-| price_structure | Stage 2, near 52w high | |
+| price_structure | Minervini Trend Template (E15): MA50>150>200 rising, ≥30% above 52w low, ≤25% off high, RS pct ≥70 — cross-sectional side file from prefilter; legacy Stage-2 fallback | |
 | catalyst_proximity | earnings 14–35d away **AND** RS/structure/volume also fired | date alone = dropped (context rule in scan loop) |
 | narrative_momentum | beat rate ≥75% AND surprise >5% AND revenue >10% YoY | recalibrated — beats alone fire for everyone |
 | insider_buying | net_insider_signal BULLISH or ceo_cfo_buying | rare in mega-caps by nature |
