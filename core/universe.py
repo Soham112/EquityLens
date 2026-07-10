@@ -406,11 +406,25 @@ def build_universe(
 
 def load_universe() -> list[tuple[str, str]]:
     """
-    Load universe from cache. Returns empty list if cache is missing or stale.
-    Call build_universe() first (or via the refresh workflow).
+    Load universe from cache. Falls back to an EXPIRED cache (up to 21d old,
+    loudly) rather than returning empty — 2026-07-10 the TTL lapsed mid-week
+    (Sunday refresh hadn't rewritten the file) and the swing prefilter silently
+    scanned 0 stocks. A week-stale S&P 500 list is ~99% correct; an empty
+    universe is 0% correct.
     """
     cache = _load_cache()
     if not cache:
+        try:
+            with open(CACHE_PATH) as f:
+                stale = json.load(f)
+            fetched = datetime.date.fromisoformat(stale.get("fetched_date", "2000-01-01"))
+            age = (datetime.date.today() - fetched).days
+            if age <= 21 and stale.get("entries"):
+                logger.warning(f"Universe cache {age}d old (TTL={CACHE_TTL_DAYS}d) — "
+                               f"USING STALE CACHE as fallback; run refresh_universe.py")
+                return [(e["ticker"], e["sector"]) for e in stale["entries"]]
+        except Exception:
+            pass
         return []
     return [(e["ticker"], e["sector"]) for e in cache["entries"]]
 
