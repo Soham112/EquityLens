@@ -37,6 +37,10 @@ SECTOR_ETFS = {
     "technology": "XLK", "communication_services": "XLC", "financials": "XLF",
     "healthcare": "XLV", "industrials": "XLI", "consumer_discretionary": "XLY",
     "energy": "XLE", "utilities": "XLU", "real_estate": "XLRE", "materials": "XLB",
+    # 11th macro added 2026-07-09 (XLP trades since 1998 — long-history
+    # validation includes it automatically). Ranking-log entries before this
+    # date have 10 sectors; score_ranking_log handles both shapes.
+    "consumer_staples": "XLP",
 }
 
 REGIMES = [
@@ -459,7 +463,10 @@ def score_ranking_log() -> dict:
         for e in pending:
             try:
                 fwd = {}
-                for s, etf in SECTOR_ETFS.items():
+                # only the sectors the entry was logged with (pre-2026-07-09
+                # entries have 10 sectors, later ones 11)
+                for s in e["prices"]:
+                    etf = SECTOR_ETFS[s]
                     closes = raw[etf]["Close"].dropna()
                     after = closes[closes.index.date > datetime.date.fromisoformat(e["date"])]
                     if len(after) < 21:

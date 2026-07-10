@@ -145,6 +145,14 @@ that's what keeps this log honest.
   (`accel_radar` in weekly universe + ⚡ callout on the funnel dashboard) —
   "about to turn" watch list, attention only, never entries. First preview:
   materials.
+- **2026-07-09 coverage expansion:** consumer_staples added as the 11th macro
+  (XLP — the funnel's defensive-rotation blind spot; XLP trades since 1998 so
+  long-history validation includes it automatically) + 8 new micros (staples,
+  insurance, crypto_financials, managed_care, travel_leisure, streaming_media,
+  transports_airlines, midstream_natgas) on top of ai_photonics/power_grid.
+  Formula-race note: ranking-log entries before this date have 10 sectors,
+  later ones 11 — score_ranking_log handles both; top-5-of-11 vs top-5-of-10
+  is a mild comparability shift, noted here so nobody mistakes it for drift.
 - **Status: OBSERVING (Phase 2 live race running — now refereeing live 50/30/20
   vs accel-only as the surviving challenger; top-5 cutoff settled).**
 

@@ -104,6 +104,7 @@ GROWTH_UNIVERSE: list[tuple[str, str]] = [
     ("QUBT",  "technology"),        # Quantum Computing Inc
     ("IONQ",  "technology"),        # IonQ — trapped ion quantum computing
     ("RGTI",  "technology"),        # Rigetti Computing — superconducting quantum
+    ("QBTS",  "technology"),        # D-Wave — quantum annealing (added 2026-07-09)
 ]
 
 # Deduplicate while preserving order

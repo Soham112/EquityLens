@@ -24,6 +24,9 @@ MACRO_SECTORS = {
     "utilities":                {"etf": "XLU"},
     "real_estate":              {"etf": "XLRE"},
     "materials":                {"etf": "XLB"},
+    # 11th macro added 2026-07-09 — the defensive-rotation blind spot: staples
+    # led 2022 while tech bled, and the funnel couldn't see it as a theme
+    "consumer_staples":         {"etf": "XLP"},
 }
 
 # ── Micro Sectors ─────────────────────────────────────────────────────────────
@@ -83,6 +86,14 @@ MICRO_SECTORS = {
         "etf": "SOCL",
         "stocks": ["META", "GOOGL", "SNAP", "PINS", "RDDT", "TTD"],
     },
+    "streaming_media": {
+        # added 2026-07-09 — comm services previously had ONE micro; NFLX only
+        # survived as a wildcard. No clean streaming ETF → NFLX price proxy
+        # (LITE/ai_photonics precedent; scout skips etf=None)
+        "macro": "communication_services",
+        "etf": "NFLX",
+        "stocks": ["NFLX", "DIS", "SPOT", "WBD"],
+    },
 
     # ── Financials ──
     "banks": {
@@ -95,6 +106,19 @@ MICRO_SECTORS = {
         "etf": "IPAY",
         "stocks": ["V", "MA", "PYPL", "XYZ", "FISV", "FIS", "AFRM"],
     },
+    "insurance": {
+        # added 2026-07-09 coverage audit — quietly a top sector of 2023-24,
+        # zero funnel representation before
+        "macro": "financials",
+        "etf": "KIE",
+        "stocks": ["PGR", "ALL", "TRV", "AIG", "MET", "CB"],
+    },
+    "crypto_financials": {
+        # added 2026-07-09 — hot 2025-26 theme, previously swing-scan-only
+        "macro": "financials",
+        "etf": "DAPP",
+        "stocks": ["COIN", "HOOD", "MSTR"],
+    },
 
     # ── Healthcare ──
     "biotech": {
@@ -106,6 +130,12 @@ MICRO_SECTORS = {
         "macro": "healthcare",
         "etf": "IHI",
         "stocks": ["ISRG", "MDT", "ABT", "BSX", "EW", "DXCM", "PODD"],
+    },
+    "managed_care": {
+        # added 2026-07-09 — huge theme, moves independently of pharma/biotech
+        "macro": "healthcare",
+        "etf": "IHF",
+        "stocks": ["UNH", "ELV", "CI", "HUM", "CNC", "CVS"],
     },
     "pharma": {
         "macro": "healthcare",
@@ -138,12 +168,24 @@ MICRO_SECTORS = {
         "etf": "GRID",
         "stocks": ["GEV", "ETN", "VRT", "PWR", "HUBB", "CEG", "VST"],
     },
+    "transports_airlines": {
+        # added 2026-07-09 — classic cyclical leader (airlines ripped 2024-25)
+        "macro": "industrials",
+        "etf": "IYT",
+        "stocks": ["UAL", "DAL", "UNP", "ODFL", "UPS", "CSX"],
+    },
 
     # ── Consumer Discretionary ──
     "ecommerce": {
         "macro": "consumer_discretionary",
         "etf": "IBUY",
         "stocks": ["AMZN", "SHOP", "ETSY", "MELI", "SE", "PDD"],
+    },
+    "travel_leisure": {
+        # added 2026-07-09 — led whole stretches of 2023-25
+        "macro": "consumer_discretionary",
+        "etf": "PEJ",
+        "stocks": ["BKNG", "MAR", "HLT", "RCL", "UBER", "ABNB"],
     },
     "ev_autos": {
         "macro": "consumer_discretionary",
@@ -162,6 +204,13 @@ MICRO_SECTORS = {
         "etf": "ICLN",
         "stocks": ["ENPH", "RUN", "NEE", "FSLR", "SEDG", "BE"],
     },
+    "midstream_natgas": {
+        # added 2026-07-09 — natgas/pipelines riding the AI-power buildout,
+        # adjacent to power_grid
+        "macro": "energy",
+        "etf": "AMLP",
+        "stocks": ["WMB", "KMI", "OKE", "LNG"],
+    },
     "nuclear": {
         "macro": "energy",
         "etf": "NLR",
@@ -176,6 +225,12 @@ MICRO_SECTORS = {
     },
 
     # ── Real Estate ──
+    "staples": {
+        # added 2026-07-09 with the consumer_staples macro — the defensive theme
+        "macro": "consumer_staples",
+        "etf": "XLP",
+        "stocks": ["PG", "KO", "PEP", "WMT", "COST", "PM", "MDLZ"],
+    },
     "reits": {
         "macro": "real_estate",
         "etf": "XLRE",
