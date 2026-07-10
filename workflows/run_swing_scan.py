@@ -92,6 +92,20 @@ def run_swing_scan() -> list[dict]:
             "suggested_dollars": s.suggested_dollars,
             "exit_rules": s.exit_rules,
             "notes": s.notes,
+            # Chart-vision fields — these were silently DROPPED here until
+            # 2026-07-10 (paid vision verdicts discarded on save; daily_scan's
+            # serializer always kept them). Keep in sync with daily_scan.py.
+            "entry_type": s.entry_type,
+            "pattern": s.pattern,
+            "pattern_confidence": s.pattern_confidence,
+            "entry_zone_low": s.entry_zone_low,
+            "entry_zone_high": s.entry_zone_high,
+            "stop_level": s.stop_level,
+            "target_level": s.target_level,
+            "risk_reward": s.risk_reward,
+            "support_levels": s.support_levels,
+            "resistance_levels": s.resistance_levels,
+            "chart_thesis": s.chart_thesis,
         }
         for s in signals
     ]
