@@ -114,7 +114,10 @@ def discovery_scan() -> dict:
 
 def load_latest_discovery() -> dict:
     import glob
-    files = sorted(glob.glob("data/discovery_*.json"), reverse=True)
+    # discovery_2*.json: date-stamped scans only — discovery_admitted.json
+    # (the E15 source-tag sidecar) matches the broader pattern and, sorting
+    # after '2', would shadow the real shortlist (bit 2026-07-10)
+    files = sorted(glob.glob("data/discovery_2*.json"), reverse=True)
     if not files:
         return {"shortlist": [], "note": "No discovery scan yet — runs Sundays."}
     with open(files[0]) as f:
