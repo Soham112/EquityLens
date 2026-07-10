@@ -28,7 +28,8 @@ MIN_PRICE = 5.0               # no true penny stocks
 SHORTLIST_N = 15
 
 
-def _scrape_wiki_tickers(url: str, symbol_col: str = "Symbol") -> list[str]:
+def _scrape_wiki_constituents(url: str) -> dict:
+    """ticker → company name from a Wikipedia constituents table."""
     import requests
     import pandas as pd
     from io import StringIO
@@ -36,20 +37,24 @@ def _scrape_wiki_tickers(url: str, symbol_col: str = "Symbol") -> list[str]:
     warnings.filterwarnings("ignore", message="Unverified HTTPS")
     r = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, verify=False, timeout=20)
     for df in pd.read_html(StringIO(r.text)):
-        if symbol_col in df.columns:
-            return [str(t).replace(".", "-") for t in df[symbol_col].tolist()]
-    return []
+        if "Symbol" in df.columns:
+            name_col = next((c for c in ("Security", "Company", "Company Name") if c in df.columns), None)
+            return {str(t).replace(".", "-"): (str(df[name_col].iloc[i]) if name_col else "")
+                    for i, t in enumerate(df["Symbol"].tolist())}
+    return {}
 
 
-def fetch_midsmall_universe() -> list[str]:
-    """S&P MidCap 400 + SmallCap 600 constituents, minus our main universe."""
+def fetch_midsmall_universe() -> tuple[list[str], dict]:
+    """S&P MidCap 400 + SmallCap 600 constituents (minus our main universe)
+    plus a ticker → company-name map."""
     from core.universe import load_universe
-    mid = _scrape_wiki_tickers("https://en.wikipedia.org/wiki/List_of_S%26P_400_companies")
-    small = _scrape_wiki_tickers("https://en.wikipedia.org/wiki/List_of_S%26P_600_companies")
+    names = {}
+    names.update(_scrape_wiki_constituents("https://en.wikipedia.org/wiki/List_of_S%26P_400_companies"))
+    names.update(_scrape_wiki_constituents("https://en.wikipedia.org/wiki/List_of_S%26P_600_companies"))
     main = {t for t, _ in load_universe()}
-    out = sorted({t for t in mid + small if t and t not in main})
-    logger.info(f"[Discovery] mid={len(mid)} small={len(small)} → {len(out)} after main-universe dedup")
-    return out
+    out = sorted({t for t in names if t and t not in main})
+    logger.info(f"[Discovery] {len(names)} scraped → {len(out)} after main-universe dedup")
+    return out, names
 
 
 def discovery_scan() -> dict:
@@ -59,7 +64,7 @@ def discovery_scan() -> dict:
     import yfinance as yf
     from core.screener import compute_trend_template
 
-    tickers = fetch_midsmall_universe()
+    tickers, names = fetch_midsmall_universe()
     if not tickers:
         return {"error": "scrape failed", "shortlist": []}
 
@@ -80,7 +85,7 @@ def discovery_scan() -> dict:
             if price < MIN_PRICE or dollar_vol < MIN_DOLLAR_VOL:
                 continue
             rows.append({
-                "ticker": t, "price": round(price, 2),
+                "ticker": t, "name": names.get(t, ""), "price": round(price, 2),
                 "rs_pct": f["rs_pct"],
                 "pct_off_52w_high": f["pct_off_52w_high"],
                 "pct_above_52w_low": f["pct_above_52w_low"],

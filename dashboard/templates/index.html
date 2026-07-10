@@ -1599,6 +1599,7 @@
       html += `<table style="width:100%;border-collapse:collapse;font-size:13px">
         <thead><tr style="border-bottom:1px solid #e5e7eb;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:#6b7280">
           <th style="text-align:left;padding:6px 4px">Ticker</th>
+          <th style="text-align:left;padding:6px 4px">Company</th>
           <th style="text-align:right;padding:6px 4px">Price</th>
           <th style="text-align:right;padding:6px 4px">RS %ile</th>
           <th style="text-align:right;padding:6px 4px">vs 52w high</th>
@@ -1609,6 +1610,7 @@
       rows.forEach(r => {
         html += `<tr style="border-bottom:1px solid #f3f4f6">
           <td style="padding:8px 4px;font-weight:700;color:#9333ea">${r.ticker}</td>
+          <td style="padding:8px 4px;color:#374151;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.name || '—'}</td>
           <td style="padding:8px 4px;text-align:right">$${r.price.toFixed(2)}</td>
           <td style="padding:8px 4px;text-align:right;font-weight:700">${r.rs_pct.toFixed(0)}</td>
           <td style="padding:8px 4px;text-align:right;color:#6b7280">${(r.pct_off_52w_high*100).toFixed(1)}%</td>

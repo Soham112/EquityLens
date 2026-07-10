@@ -255,6 +255,18 @@ def auto_enter_swing_signals(swing_signals: list) -> list[str]:
     def _loose(gate: str) -> bool:
         return exploring and gate_state.get(gate) == "loose"
 
+    # E15: names admitted via the Super-Performer discovery pipe carry a
+    # source:discovery tag in their feedback record — screen_report then
+    # produces a discovery-cohort hit rate for free (same pattern as strict:*)
+    discovery_admitted: set = set()
+    try:
+        admitted_file = GROWTH_PORTFOLIO_FILE.parent / "discovery_admitted.json"
+        if admitted_file.exists():
+            import json as _json
+            discovery_admitted = set(_json.loads(admitted_file.read_text()))
+    except Exception:
+        pass
+
     min_signals = settings.swing_explore_min_signals if _loose("signals") else settings.swing_strict_min_signals
     min_rr = settings.swing_explore_min_rr if _loose("risk_reward") else settings.swing_strict_min_rr
     zone_tol = settings.swing_explore_zone_tolerance if _loose("entry_zone") else settings.swing_strict_zone_tolerance
@@ -374,7 +386,8 @@ def auto_enter_swing_signals(swing_signals: list) -> list[str]:
                     ticker=s.ticker,
                     # strict:* tags ride with the fired screens — gate_cohort_report
                     # groups closed trades by them to judge each loosened gate
-                    screens_matched=list(getattr(s, "signals_fired", []) or []) + strict_tags,
+                    screens_matched=list(getattr(s, "signals_fired", []) or []) + strict_tags
+                                    + (["source:discovery"] if s.ticker in discovery_admitted else []),
                     signal_type="SWING",
                     entry_price=fill,
                     # normalize 0-7 signal score to hunter's 0-10 scale so the
