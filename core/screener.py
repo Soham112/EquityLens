@@ -490,11 +490,18 @@ def _check_rs_vs_sector(p: PriceData, sector_etf_return_60d: Optional[float]) ->
 
 
 def _check_price_structure(p: PriceData) -> tuple[bool, str]:
-    """Signal 3: near 52w high (breakout territory) OR forming a flat base (Stage 1→2 transition)."""
-    if p.week_52_high_pct is None:
-        return False, ""
-    # Near 52w high — breakout territory
-    if p.week_52_high_pct >= -0.08 and p.stage in ("2",):
+    """Signal 3 — E15 (2026-07-10): Minervini Trend Template when today's
+    cross-sectional side file exists (E14: beat the old check 11/11 years at
+    both 21d and 63d horizons, incl. 2018/2022), else the legacy Stage-2 check.
+    The flat-base (VCP-style) branch is kept in both paths."""
+    tpl = load_trend_template(p.ticker) if getattr(p, "ticker", None) else None
+    if tpl is not None:
+        if tpl["template_pass"]:
+            return True, (f"Trend Template pass (RS {tpl['rs_pct']:.0f}th pct, "
+                          f"{abs(tpl['pct_off_52w_high'])*100:.1f}% off 52w high, "
+                          f"{tpl['pct_above_52w_low']*100:.0f}% above 52w low)")
+    elif p.week_52_high_pct is not None and p.week_52_high_pct >= -0.08 and p.stage in ("2",):
+        # legacy fallback — no template file today (off-cache ticker etc.)
         return True, f"Near 52w high ({abs(p.week_52_high_pct)*100:.1f}% below), Stage 2"
     # Flat base: price near MA50, ATR compressed — energy coiling
     if p.atr_compression is not None and p.atr_compression < 0.75:
@@ -734,6 +741,14 @@ def swing_universe_prefilter(max_tickers: int = 150) -> list[tuple[str, str]]:
         except Exception as e:
             logger.warning(f"[SwingPrefilter] Batch download failed: {e}")
             return []
+
+    # E15: compute Minervini Trend Template flags cross-sectionally on this
+    # batch (needs everyone's 3m returns for the RS percentile) and write the
+    # side file _check_price_structure reads. One computation, zero extra HTTP.
+    try:
+        write_trend_template_file(raw, tickers)
+    except Exception as e:
+        logger.warning(f"[SwingPrefilter] trend template file failed: {e}")
 
     # Collect ALL passers with a momentum rank, then take the top max_tickers.
     # The old loop broke at max_tickers in universe-cache order, so whoever
@@ -993,3 +1008,85 @@ def swing_momentum_scan(
             _apply_chart_vision(chart_candidates)
 
     return results
+
+
+# ── E15: Minervini Trend Template (shared by prefilter + discovery) ───────────
+# 8-point template computed cross-sectionally on a batch OHLCV frame.
+# E14 backtest: beat the old price_structure logic 11/11 years at BOTH 21d and
+# 63d horizons (fwd63 +4.33% vs +3.05%), including 2018 and 2022.
+
+TREND_TEMPLATE_FILE = "data/trend_template_{date}.json"
+
+
+def compute_trend_template(raw, tickers) -> dict:
+    """Per-ticker template flags + cross-sectional RS percentile from a
+    multi-ticker OHLCV frame (needs ~320+ rows per ticker for MA200 history)."""
+    import numpy as np
+    import pandas as pd
+
+    top_level = set(raw.columns.get_level_values(0)) if isinstance(raw.columns, pd.MultiIndex) else None
+    feats = {}
+    for t in tickers:
+        try:
+            df = raw[t] if top_level and t in top_level else (raw if top_level is None else None)
+            if df is None:
+                continue
+            c = df["Close"].dropna()
+            if len(c) < 260:
+                continue
+            price = float(c.iloc[-1])
+            ma50 = float(c.rolling(50).mean().iloc[-1])
+            ma150 = float(c.rolling(150).mean().iloc[-1])
+            ma200_s = c.rolling(200).mean()
+            ma200 = float(ma200_s.iloc[-1])
+            ma200_1m = float(ma200_s.iloc[-22]) if len(ma200_s) >= 22 and not pd.isna(ma200_s.iloc[-22]) else None
+            lo52 = float(c.tail(252).min())
+            hi52 = float(c.tail(252).max())
+            ret3m = float(c.iloc[-1] / c.iloc[-64] - 1) if len(c) >= 64 else None
+            if any(pd.isna(x) for x in (ma50, ma150, ma200)) or ma200_1m is None or ret3m is None:
+                continue
+            feats[t] = (price, ma50, ma150, ma200, ma200_1m, lo52, hi52, ret3m)
+        except Exception:
+            continue
+
+    rets = sorted(v[7] for v in feats.values())
+    n = len(rets)
+    out = {}
+    for t, (price, ma50, ma150, ma200, ma200_1m, lo52, hi52, ret3m) in feats.items():
+        rs_pct = float(np.searchsorted(rets, ret3m)) / n * 100 if n else 0.0
+        out[t] = {
+            "template_pass": bool(price > ma50 > ma150 > ma200
+                                  and ma200 > ma200_1m
+                                  and price >= 1.30 * lo52
+                                  and price >= 0.75 * hi52
+                                  and rs_pct >= 70),
+            "rs_pct": round(rs_pct, 1),
+            "pct_off_52w_high": round(price / hi52 - 1, 4),
+            "pct_above_52w_low": round(price / lo52 - 1, 4),
+        }
+    return out
+
+
+def write_trend_template_file(raw, tickers) -> None:
+    import datetime as _dt
+    import json as _json
+    flags = compute_trend_template(raw, tickers)
+    path = TREND_TEMPLATE_FILE.format(date=_dt.date.today().isoformat())
+    with open(path, "w") as f:
+        _json.dump(flags, f)
+    n_pass = sum(1 for v in flags.values() if v["template_pass"])
+    logger.info(f"[TrendTemplate] {n_pass}/{len(flags)} tickers pass → {path}")
+
+
+def load_trend_template(ticker: str) -> Optional[dict]:
+    """Today's template flags for one ticker (None if file/ticker missing)."""
+    import datetime as _dt
+    import json as _json
+    path = TREND_TEMPLATE_FILE.format(date=_dt.date.today().isoformat())
+    if not os.path.exists(path):
+        return None
+    try:
+        with open(path) as f:
+            return _json.load(f).get(ticker.upper())
+    except Exception:
+        return None

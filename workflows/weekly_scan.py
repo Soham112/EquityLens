@@ -137,6 +137,18 @@ def run_weekly_scan() -> dict:
     except Exception as e:
         logger.warning(f"[E9-Phase2] ranking log failed: {e}")
 
+    # E15 Phase 1: Super-Performer discovery — Trend Template screen over the
+    # S&P 400/600 mid/small caps our main universe excludes. Shortlist only;
+    # approved names enter via growth_universe and face the same gates.
+    try:
+        from core.discovery import discovery_scan
+        disc = discovery_scan()
+        if disc.get("shortlist"):
+            logger.info(f"[Discovery] shortlist: "
+                        + ", ".join(r["ticker"] for r in disc["shortlist"]))
+    except Exception as e:
+        logger.warning(f"[Discovery] scan failed: {e}")
+
     _print_summary(output)
     return output
 

@@ -378,16 +378,17 @@ def trend_template_backtest() -> dict:
             if any(pd.isna(r[k]) for k in ("ma50", "ma150", "ma200", "ma200_1m_ago",
                                            "lo52", "hi52", "ret3m")):
                 continue
-            if i + 21 >= len(f):
+            if i + 63 >= len(f):
                 continue
             fwd21 = float(f["close"].iloc[i + 21] / r["close"] - 1)
-            rows[t] = (r, fwd21)
+            fwd63 = float(f["close"].iloc[i + 63] / r["close"] - 1)
+            rows[t] = (r, fwd21, fwd63)
         if len(rows) < 50:
             continue
         rets = sorted(v[0]["ret3m"] for v in rows.values())
         n = len(rets)
         year = str(d.year)
-        for t, (r, fwd21) in rows.items():
+        for t, (r, fwd21, fwd63) in rows.items():
             price = r["close"]
             rs_pct = np.searchsorted(rets, r["ret3m"]) / n * 100
             template = (price > r["ma50"] > r["ma150"] > r["ma200"]
@@ -397,7 +398,7 @@ def trend_template_backtest() -> dict:
                         and rs_pct >= 70)
             structure = (price / r["hi52"] - 1) >= -0.08 and \
                         price > r["ma50"] > r["ma200"] and r["ma200"] > r["ma200_1m_ago"]
-            rec = (fwd21, year)
+            rec = (fwd21, year, fwd63)
             cohorts["all_passers"].append(rec)
             if template:
                 cohorts["template_pass"].append(rec)
@@ -409,9 +410,12 @@ def trend_template_backtest() -> dict:
         if not rows:
             return {"n": 0}
         v = [x[0] for x in rows]
+        v63 = [x[2] for x in rows]
         return {"n": len(v), "avg": round(float(np.mean(v)), 4),
                 "median": round(float(np.median(v)), 4),
-                "win_rate": round(float(np.mean([x > 0 for x in v])), 3)}
+                "win_rate": round(float(np.mean([x > 0 for x in v])), 3),
+                "avg_63d": round(float(np.mean(v63)), 4),
+                "win_rate_63d": round(float(np.mean([x > 0 for x in v63])), 3)}
 
     years = sorted(by_year)
     report = {"window": f"{snap_dates[0].date()} → {snap_dates[-1].date()}",

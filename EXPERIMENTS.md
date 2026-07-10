@@ -303,6 +303,32 @@ that's what keeps this log honest.
   it does 11/11). NO change to the live price_structure signal yet (queue:
   re-test at fwd63 before considering replacement).
 
+### E15 — Trend Template live + Super-Performer discovery (Phase 1)
+- **Date shipped:** 2026-07-10 (user decision after E14's two-horizon confirmation:
+  template beat the old structure check **11/11 years at BOTH fwd21 and fwd63** —
+  fwd63 +4.33% vs +3.05%).
+- **Changes:**
+  1. `price_structure` signal = Minervini Trend Template (8 criteria incl.
+     MA50>150>200 stack, ≥30% above 52w low, cross-sectional RS pct ≥70).
+     Computed in the prefilter batch (needs everyone's returns for the RS rank),
+     written to data/trend_template_{date}.json, read by the signal; legacy
+     Stage-2 check is the fallback when no file; flat-base branch kept.
+  2. `core/discovery.py` — weekly (Sunday) Trend Template screen over the
+     S&P MidCap 400 + SmallCap 600 (~1,000 names outside our universe), $5M/day
+     liquidity floor, top-15 by RS pct → data/discovery_{date}.json + the new
+     "Super Performers" dashboard tab (/api/discovery). NAMES ONLY — research
+     candidates for Phase 2 dossiers; approved names enter via growth_universe
+     and face the same gates. No parallel pipeline.
+- **First live results:** 458-universe: MGM passes (RS 88), NVDA fails (RS 68).
+  Discovery: 177/1000 mid/smalls pass; shortlist RS 98-100 names up 87-611%
+  off 52w lows (PENG, SEZL, ACMR, DAVE, LQDA, ...).
+- **How to judge:** (a) live signal — price_structure's per-screen hit rate
+  pre/post 2026-07-10 cohorts; (b) discovery — track shortlist names' forward
+  performance and whether any graduate to growth_universe entries that win.
+  Phase 2 (dossiers via Sunday web research, $0) and Phase 3 (Haiku catalyst
+  classifier) queued.
+- **Status: OBSERVING.**
+
 ## Settled experiments
 
 ### E4 — Valuation cap must demote the signal, not just the number (BUG FIX)

@@ -797,6 +797,15 @@ async def feedback_mistakes():
     return {"mistakes": [asdict(m) for m in mistake_report()]}
 
 
+@app.get("/api/discovery")
+async def discovery():
+    """E15: Super-Performer discovery shortlist (mid/small caps, Trend Template)."""
+    import sys
+    sys.path.insert(0, str(Path(__file__).parent.parent))
+    from core.discovery import load_latest_discovery
+    return load_latest_discovery()
+
+
 @app.get("/api/backtest/sectors")
 async def backtest_sectors(refresh: bool = Query(default=False)):
     """E9 Phase 1: 5-year sector funnel backtest (cached; refresh=true recomputes)."""
