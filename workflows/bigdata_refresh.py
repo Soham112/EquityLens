@@ -25,7 +25,10 @@ logger = logging.getLogger(__name__)
 
 
 def get_weekly_tickers() -> list[str]:
-    """Load this week's ticker list from the weekly universe file."""
+    """This week's sentiment coverage: weekly universe + growth universe +
+    discovery-admitted names. Growth/discovery names previously scanned with
+    neutral sentiment and no insider data (coverage gap fixed 2026-07-10,
+    ~+$0.03/week of Haiku)."""
     import glob
     files = sorted(glob.glob("data/weekly_universe_*.json"), reverse=True)
     if not files:
@@ -33,8 +36,23 @@ def get_weekly_tickers() -> list[str]:
         return _fallback_tickers()
     with open(files[0]) as f:
         data = json.load(f)
-    tickers = data.get("all_stocks", [])
-    logger.info(f"Loaded {len(tickers)} tickers from {files[0]}")
+    tickers = list(data.get("all_stocks", []))
+
+    try:
+        from core.growth_universe import get_growth_universe
+        tickers += [t for t, _ in get_growth_universe()]
+    except Exception as e:
+        logger.warning(f"growth universe not added to sentiment refresh: {e}")
+    try:
+        admitted_path = Path("data/discovery_admitted.json")
+        if admitted_path.exists():
+            tickers += json.loads(admitted_path.read_text())
+    except Exception:
+        pass
+
+    tickers = list(dict.fromkeys(tickers))
+    logger.info(f"Sentiment refresh list: {len(tickers)} tickers "
+                f"(weekly universe + growth + discovery-admitted)")
     return tickers
 
 
