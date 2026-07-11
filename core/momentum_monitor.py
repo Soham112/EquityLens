@@ -1,10 +1,12 @@
 """
 Momentum Monitor — daily exit signal checker for open swing positions.
 
-Checks three exit conditions on each open swing position:
+Checks these exit conditions on each open swing position:
   1. Stop loss hit       — price fell below ATR stop (already in stop_loss.py)
   2. Momentum stall      — volume drying up + price going flat for 3+ days
   3. Thesis break        — the entry reason is structurally gone
+  4. P/E-expansion top   — E16: P/E ran to 2.5x+ its breakout level WHILE earnings
+                           growth decelerated (price outran earnings — Minervini topping)
 
 Returns a list of ExitAlert objects for the dashboard and daily scan to act on.
 Chart vision is NOT used for exits — it's reserved for entry timing only.
@@ -21,12 +23,13 @@ logger = logging.getLogger(__name__)
 MOMENTUM_STALL_DAYS = 3       # consecutive days of low volume + flat price
 VOLUME_STALL_THRESHOLD = 0.80 # volume drops below 80% of 90d avg = stalling
 PRICE_FLAT_THRESHOLD = 0.015  # price moving less than 1.5% in either direction per day = flat
+PE_EXPANSION_MULT = 2.5       # E16: current P/E >= 2.5x breakout P/E = topping alert zone (Minervini)
 
 
 @dataclass
 class ExitAlert:
     ticker: str
-    reason: str           # "MOMENTUM_STALL" | "THESIS_BREAK" | "STOP_LOSS"
+    reason: str           # "MOMENTUM_STALL" | "THESIS_BREAK" | "STOP_LOSS" | "PE_EXPANSION_TOP" | "EARNINGS_PROXIMITY"
     urgency: str          # "IMMEDIATE" | "NEXT_SESSION"
     current_price: float
     entry_price: float
@@ -114,6 +117,40 @@ def check_thesis_break(ticker: str, signals_fired: list[str], entry_price: float
     return False, ""
 
 
+def check_pe_expansion(ticker: str, breakout_pe: Optional[float]) -> tuple[bool, str]:
+    """
+    E16 — P/E-expansion topping signal (Minervini, ch. 3).
+
+    A superperformance run tops when the price outruns earnings: the P/E balloons
+    to 2.5-3x its breakout level WHILE quarterly earnings/revenue growth decelerates.
+    The mirror case — P/E flat or expanding while growth keeps pace (Apollo, CKE) —
+    is HEALTHY and must NOT fire; that's why deceleration is a required co-condition.
+
+    Fires only when both are true:
+      1. current P/E >= PE_EXPANSION_MULT x breakout P/E
+      2. revenue_growth_trend == DECELERATING (proxy for earnings deceleration until
+         E17 lands a direct quarterly-EPS-growth signal)
+
+    High-precision by design: expansion alone (growth intact) is left to run.
+    """
+    if not breakout_pe or breakout_pe <= 0:
+        return False, ""
+    try:
+        from core.data_layer import fetch_fundamentals
+        f = fetch_fundamentals(ticker)
+        if f is None or not f.pe_ratio or f.pe_ratio <= 0:
+            return False, ""
+        expansion = f.pe_ratio / breakout_pe
+        if expansion >= PE_EXPANSION_MULT and f.revenue_growth_trend == "DECELERATING":
+            return True, (
+                f"P/E {f.pe_ratio:.0f} = {expansion:.1f}x breakout P/E {breakout_pe:.0f} "
+                f"with decelerating growth — price outran earnings, classic topping"
+            )
+    except Exception as e:
+        logger.debug(f"pe_expansion check {ticker}: {e}")
+    return False, ""
+
+
 def monitor_open_swings() -> list[ExitAlert]:
     """
     Run all exit checks on open swing positions.
@@ -142,6 +179,7 @@ def monitor_open_swings() -> list[ExitAlert]:
                     entry_price=gpos.entry_price,
                     stop_price=gpos.stop_price,
                     screens_matched=[],
+                    breakout_pe=getattr(gpos, "breakout_pe", None),
                 ))
     except Exception as e:
         logger.debug(f"momentum_monitor: growth positions skipped: {e}")
@@ -220,7 +258,23 @@ def monitor_open_swings() -> list[ExitAlert]:
             ))
             continue
 
-        # 4. Earnings proximity — swing positions shouldn't sleepwalk into a print.
+        # 4. P/E-expansion topping (E16) — price outran earnings. High-precision:
+        # only fires when the multiple ballooned AND growth decelerated.
+        topping, top_detail = check_pe_expansion(ticker, getattr(pos, "breakout_pe", None))
+        if topping:
+            alerts.append(ExitAlert(
+                ticker=ticker,
+                reason="PE_EXPANSION_TOP",
+                urgency="NEXT_SESSION",
+                current_price=current_price,
+                entry_price=entry_price,
+                return_pct=return_pct,
+                detail=top_detail,
+                action=f"Topping risk — hunt for sell signals / price weakness. Return so far: {return_pct:+.1%}",
+            ))
+            continue
+
+        # 5. Earnings proximity — swing positions shouldn't sleepwalk into a print.
         # Not an auto-exit: a decision prompt (exit, trim, or consciously hold).
         try:
             from core.earnings_calendar import get_next_earnings

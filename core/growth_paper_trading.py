@@ -47,6 +47,7 @@ class GrowthPosition:
     current_price: float = 0.0
     peak_price: Optional[float] = None
     stop_price: Optional[float] = None # hard stop or trailing stop level
+    breakout_pe: Optional[float] = None # trailing P/E at entry — baseline for E16 P/E-expansion topping exit
     trims_taken: list[str] = field(default_factory=list)  # each profit-take level fires once
 
     @property
@@ -147,6 +148,17 @@ def _fetch_price(ticker: str) -> Optional[float]:
         return None
 
 
+def _fetch_trailing_pe(ticker: str) -> Optional[float]:
+    """Trailing P/E at entry — the breakout baseline for the E16 P/E-expansion
+    topping exit. One .info call per entry (entries are rare; never in a loop over
+    the universe). Returns None for unprofitable names (no meaningful P/E)."""
+    try:
+        pe = (yf.Ticker(ticker).info or {}).get("trailingPE")
+        return float(pe) if pe and float(pe) > 0 else None
+    except Exception:
+        return None
+
+
 def execute_buy(ticker: str, sector: str, growth_score: float,
                 signal: str = "SPECULATIVE BUY",
                 size_dollars: Optional[float] = None) -> bool:
@@ -192,6 +204,7 @@ def execute_buy(ticker: str, sector: str, growth_score: float,
         current_price=price,
         peak_price=price,
         stop_price=stop,
+        breakout_pe=_fetch_trailing_pe(ticker),
     )
     if not p.start_date:
         p.start_date = datetime.date.today().isoformat()

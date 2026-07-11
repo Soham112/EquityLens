@@ -17,6 +17,55 @@ that's what keeps this log honest.
 
 ## Active experiments
 
+### E16 — P/E-expansion topping exit (Minervini ch. 3) (SHIPPED)
+- **Hypothesis:** A superperformance run tops when price outruns earnings — the P/E
+  balloons to 2.5-3x its breakout level *while* quarterly growth decelerates. Detecting
+  that specific combination should flag tops earlier (or catch ones the trail stop
+  misses) without cutting healthy runs where the P/E expands but earnings keep pace
+  (Apollo Group, CKE — P/E flat/expanding, growth intact, kept running).
+- **Change (live 2026-07-11):** swing entries now record `breakout_pe` (trailing P/E at
+  fill) on the `GrowthPosition`. `momentum_monitor.check_pe_expansion()` raises a
+  `PE_EXPANSION_TOP` alert (NEXT_SESSION urgency) only when **both** hold:
+  current P/E ≥ 2.5× breakout P/E **AND** `revenue_growth_trend == DECELERATING`.
+  Expansion with growth intact is deliberately left to run. Alert, not auto-exit —
+  it tells the operator to hunt for sell signals / price weakness.
+- **Why an exit and not an entry:** the book's high-P/E case studies are survivorship-
+  biased, so high P/E is unsafe as a *buy* signal. As a topping signal on names already
+  held for other reasons there's no graveyard sampling — pure position management.
+- **Known limitation:** deceleration is proxied by *revenue* trend until E17 lands a
+  direct quarterly-EPS-growth-velocity signal; swap the co-condition to EPS then.
+  Only names entered after 2026-07-11 carry a `breakout_pe` (no retroactive baseline);
+  unprofitable names (no trailing P/E) never trigger — correct.
+- **How to judge (pre-registered):** over the next ~20 swing exits, for every position
+  that fires `PE_EXPANSION_TOP`, measure the forward 10- and 20-trading-day return from
+  the alert. WORKED if flagged names draw down (or underperform the swing book) more
+  than un-flagged concurrent holds, i.e. the alert leads weakness. FAILED if flagged
+  names keep climbing (we'd be clipping winners — the Apollo/CKE false-positive case).
+  Watch the fire rate: the deceleration gate should make this rare; if it never fires
+  across a full cohort, loosen toward P/E-alone-with-price-weakness rather than growth.
+- **Status: OBSERVING (live since 2026-07-11).** No fires yet — the two open growth
+  positions predate the `breakout_pe` field.
+
+### E17 — Earnings-growth velocity as a scored entry factor (BACKTEST FIRST, not shipped)
+- **Hypothesis:** Minervini's actual superperformance driver is *earnings* growth
+  ("Apollo earning 40% per annum… the P/E takes care of itself"), but
+  `growth_hunter._score_revenue` scores **revenue** growth + acceleration and margins —
+  EPS-growth velocity is scored nowhere on the trading track. Adding a quarterly-
+  EPS-growth / earnings-acceleration factor should improve the E15 Super-Performer
+  discovery set's hit rate on the profitable-compounder case.
+- **Why backtest-first, NOT shipped:** this changes *what gets bought*, and E14 is the
+  standing warning that a plausible Minervini rule (the Trend Template) FAILED its
+  10-year backtest (beat baseline in only 4/11 years). No production wiring until the
+  history says it helps.
+- **Pre-registered test (write before running):** on the E15 discovery universe over a
+  historical window, rank candidates with vs. without an EPS-growth-velocity factor
+  added to `growth_hunter`. Success = the EPS-augmented ranking's top decile shows a
+  higher forward hit rate / avg return than the current rubric's top decile, era-split
+  stable (don't accept a single-era win — same discipline as E11/E14). No paid API in
+  the loop (yfinance earnings history only) — respects the vision-backtest cost rule.
+- **Status: NOT STARTED** — entry pre-registered 2026-07-11; backtest to be built and
+  run before any change to `growth_hunter` scoring.
+
 ### E7 — Swing exploration mode: loosened, self-adapting entry gates
 - **Date started:** 2026-07-08
 - **Change:** selection gates loosened (signals 4+→3+, R/R 2.0→1.2, zone 2%→5%);
