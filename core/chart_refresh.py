@@ -70,7 +70,16 @@ def refresh_stale_candidates(max_age_days: int = 3) -> list[dict]:
         analyzed_at = candidate.get("analyzed_at")
         ticker = candidate.get("ticker", "")
 
-        # Check if stale
+        # Cost cap (user decision 2026-07-10): only 3+/7 candidates earn vision
+        # refreshes — the old no-timestamp path re-analyzed the whole 2/7 crowd
+        # daily (~15-90 paid calls/day on stocks the scan itself didn't chart).
+        # Entry safety is unaffected: auto-entry triggers off the SAVED zones and
+        # stops numerically every day; vision only re-checks structure.
+        if candidate.get("signals_score", 0) < 3:
+            updated_candidates.append(candidate)
+            continue
+
+        # Check if stale (charts stay valid for max_age_days; no daily re-looks)
         is_stale = False
         if analyzed_at:
             try:
@@ -79,7 +88,7 @@ def refresh_stale_candidates(max_age_days: int = 3) -> list[dict]:
             except (ValueError, TypeError):
                 is_stale = True  # unknown format = treat as stale
         else:
-            is_stale = True  # no analysis timestamp = stale
+            is_stale = True  # 3+/7 with no chart yet (e.g. vision failed at scan)
 
         if not is_stale:
             updated_candidates.append(candidate)
