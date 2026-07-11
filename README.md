@@ -1,303 +1,197 @@
-# EquityLens — AI Equity Research Platform
+# EquityLens — Self-Improving AI Equity Research Platform
 
-An intelligent, **fully automated** AI-driven equity research and paper trading platform. EquityLens combines deep fundamental analysis, technical chart vision, and real-time sentiment data to identify high-conviction investment opportunities across S&P 500 and Nasdaq 100.
+An AI-driven equity research and paper-trading platform that **learns from its own
+track record**. EquityLens combines fundamental analysis, technical chart vision
+(Claude), and sentiment data to trade two automated paper portfolios — and every
+rule it trades by is treated as a hypothesis: backtested before it ships, tagged
+and measured while it runs, and tightened or replaced when its own evidence says so.
+
+> **EXPERIMENTS.md** is the heart of the project: a living log of every behavioral
+> change — hypothesis, pre-registered success measure, evidence, verdict. Nothing
+> changes trading logic without an entry there.
 
 ## Philosophy
 
-**Paper portfolios are fully automated** on both tracks — entries and exits execute without manual intervention. Real trades are executed manually by the user after reviewing signals. Goal: build a precise track record in paper mode, then act with confidence.
+Paper portfolios are **fully automated** (entries + exits) on both tracks. Real
+trades are executed manually by the user after reviewing signals. Goal: build a
+precise, honest track record in paper mode, then act on it with confidence.
 
-### Key Principles
-- **Adaptive conviction-based sizing** — position size scales with conviction (not fixed dollar amounts)
-- **Capital compounds** — exit proceeds recycle into the pool; slot sizes grow after wins, shrink after losses
-- **No fixed price targets or time stops** — exits driven by: stop loss, momentum stall, thesis break, trailing stop, or earnings proximity
-- **Learning feedback loop** — closed trades feed mistake patterns that adjust future entry scoring
+- **Backtest what is mechanically replayable; forward-observe only what depends on
+  live judgment.** Never forward-wait for what history can answer today.
+- **Make mistakes cheap, labeled, and counted.** Losses are tuition — but only if
+  every trade carries tags explaining which rule allowed it.
+- Adaptive conviction-based sizing, compounding capital, no fixed targets or time
+  stops. Risk controls (stops, risk caps, blackouts) are never loosened; selection
+  rules are hypotheses under test.
 
----
+## Capital — one unified $5,000 paper pool
+
+| Track | Capital | Sizing |
+|---|---|---|
+| Long-term (`core/paper_trading.py`) | $3,500 | Conviction-weighted: 8.0 → 5.5%, 10.0 → 7% of total value |
+| Swing (`core/growth_paper_trading.py`) | $1,500 | Slot = total/6 × setup quality; **0.5x probation** for entries passing loose-but-not-strict gates |
+
+Both compound independently; exit proceeds recycle into their pool.
+
+## The learning loops (what makes it self-improving)
+
+| Loop | What it does | Where to see it |
+|---|---|---|
+| **E7 — Adaptive swing gates** | Entry gates run loosened (3+/7 signals, R/R ≥1.2); entries failing strict gates are tagged `strict:*` and half-sized; each gate **self-tightens** when its cohort proves bad (≥10 closed, hit <45%) | `/api/feedback/gates` |
+| **E8 — Shadow tracking (LT)** | Every gate that demotes a BUY stamps its name (`demoted_by`); demoted stocks are scored at 30/90d as **shadow trades** — measuring the road not taken at zero risk | Long-Term tab → 👁 Shadow Tracking |
+| **E9 — Sector formula race** | The funnel's ranking formula was backtested over 5y AND 27y; the live Sunday race logs every challenger's ranking + forward returns until one earns production | Weekly Review → 📊 5-Year Sector Backtest |
+| **E10 — Accel radar + probe** | Sectors accelerating outside the funnel's top-5 get flagged; their strongest microsector's stocks audition in the deep scan (tagged `source=radar`) | Weekly Review funnel ⚡ callout |
+| **E13 — Vision grading** | Every chart-vision verdict from daily scans is graded against what prices did next — the analyst gets a hit-rate, free | Sunday review, EXPERIMENTS.md |
+| **E15 — Super-Performer discovery** | Weekly Minervini Trend Template screen over ~1,000 S&P 400/600 mid/small caps → research shortlist → one-time company dossiers → admits face the same gates (tagged `source:discovery`) | Super Performers ★ tab |
+| **Mistake patterns** | Recurring loss conditions (evidence-gated) penalize matching new candidates, bounded −1.5 conviction | `/api/feedback/mistakes` |
+| **Signal outcomes** | Every BUY/WATCHLIST scored at 30/90d with simulated stops; Hunter's weights adapt to 90d hit rates | `/api/feedback/summary` |
 
 ## Architecture
 
-### Capital Allocation (Unified $5,000 Paper Pool)
-
-| Track | Module | Allocation | Sizing |
-|---|---|---|---|
-| **Long-Term** | `core/paper_trading.py` | $3,500 | Conviction-weighted: 8.0 conviction → 5.5% of total value, 10.0 → 7% (interpolated within tiers) |
-| **Swing/Speculative** | `core/growth_paper_trading.py` | $1,500 | Base slot = total_value / 6, scaled by setup quality (4+/7 signals) and risk/reward ratio |
-
-Both compound independently. Exit proceeds return to cash pool; next entries size off live portfolio value.
-
-### 7-Agent Deep Pipeline
-
+### Core pipeline (7 agents)
 ```
 Hunter → Critic → Sentiment → Validator → Portfolio Manager + Scout + Journal
 ```
 
-| Agent | Role | Output |
+### Long-term signal logic
+- **BUY**: conviction ≥8 AND data confidence ≥7 — every BUY gets weekly-chart vision
+- Gates that demote (all recorded for shadow tracking): valuation (Graham/sector-PE
+  cap at 7.0), macro headwinds (−0.5 to −1.5), sector momentum, correlation (>30%
+  sector exposure), earnings blackout, VIX pause, conviction trend, mistake patterns
+- **Every conviction adjustment re-checks the signal** — a capped 7.0 can never
+  ship as a BUY (E4, learned the hard way)
+
+### Swing pipeline (three-tier funnel)
+```
+~458 stocks (live S&P 500 + Nasdaq 100)
+  ↓ math prefilter (price/volume/RSI/MA/ATR) — one batch download, 400d cache
+  ↓ 7 signals — incl. price_structure = full Minervini Trend Template
+    (MA50>150>200 rising, ≥30% above 52w low, ≤25% off high, RS percentile ≥70 —
+     E14: beat the old check 11/11 years at both 21d and 63d horizons)
+  ↓ chart vision (Claude/Sonnet) on 3+/7 — 18-pattern vocabulary, anti-bias rules,
+    MA200 + 52-week-high context on every chart
+  ↓ adaptive gates + probation sizing → entry
+```
+
+### Stops (E11/E12 — backtested on 4,000 entries, era-split stable)
+```
+Swing:      stop = S1 − 0.5×ATR      (2.5×ATR fallback only when no tested support)
+Long-term:  stop = max(S1 − 0.5×ATR, entry − 2.5×ATR)
+```
+S1 = nearest support tested ≥2×. Trailing stops, profit trims, and the momentum-stall
+exit (kept — it protects in bear markets, per era-split evidence) complete the exit
+engine. Dollar risk is constant: wider stop ⇒ smaller position.
+
+### Sector funnel (Sunday)
+11 macro sectors → 34 microsectors + 14 wildcards, scored vs SPY → **top 5** macro
+(top-3 caught the eventual best sector only 36% of weeks; top-5 catches 51% — E9)
+→ ~100 weekly deep-scan candidates. The ranking formula (50/30/20) stays until the
+live formula race graduates a challenger (accel-only leads the 27-year test).
+
+### Super-Performer discovery (E15)
+Minervini-inspired: superperformance happens in mid/small caps *before* they join
+the big indexes. Sundays: Trend Template screen over the S&P MidCap 400 + SmallCap
+600 (names outside our universe) → top-15 RS shortlist → **one-time company
+dossiers** (web research: product, catalyst, management, red flags — written once,
+updated with dated deltas) → ADMIT/WATCH/PASS. Admits join the growth universe and
+face every normal gate. No quotas: zero admits on a quiet Sunday is a good outcome.
+
+## Automated schedule
+
+Managed via Claude Code scheduled tasks (fire while the app is open; the daily scan
+also has a guarded launchd runner in `scripts/`):
+
+| Task | When | What |
 |---|---|---|
-| **Hunter** | Scores fundamental + technical + valuation strength (0-10) | Quantitative signal |
-| **Critic** | Red flags: litigation, SEC issues, auditor problems | Kill switches |
-| **Sentiment** | yfinance news headlines scored by Claude Haiku + narrative momentum | ±1.5 conviction boost/penalty |
-| **Validator** | Combines all agents → BUY / WATCHLIST / AVOID | Final signal |
-| **Portfolio Manager** | Conviction-weighted sizing, concentration limits, anti-whipsaw | Position recommendation |
-| **Scout** | Weekly sector funnel (momentum-ranked) | Universe sub-selection |
-| **Journal** | Trade logging, drift detection, outcome tracking | Performance attribution |
+| Universe refresh | Sun 7 AM | Live scrape S&P 500 + Nasdaq 100 → ~458 tickers |
+| Growth universe refresh | Sun 7:30 AM | Validate curated small/mid-cap list |
+| Weekly review | Sun 8 AM | Sentiment refresh (126 tickers) → sector funnel (11 macros) → discovery scan + dossiers → outcome review → formula race scoring → **EXPERIMENTS.md re-scoring** → Monday briefing |
+| Daily scan | 9:35 AM Mon–Fri | Deep pipeline (~100 stocks) + swing funnel + auto-entries/exits + stop re-eval + chart refresh (3+/7 only, 3-day validity) |
+| Decision capture | 4:30 PM Mon–Fri | "Did you invest?" for each BUY |
+| Paper report | 5 PM Mon–Fri | Evening P&L |
 
-### Signal Logic (Long-Term)
+## Running costs (measured, not estimated)
 
-```
-BUY      → conviction >= 8 AND data_confidence >= 7
-WATCHLIST → conviction 6-7 AND data_confidence >= 6
-AVOID    → anything else (or conviction capped by macro/valuation gates)
-```
-
-**Gates & Penalties:**
-- **Valuation**: OVERVALUED (MOS < 0%) caps conviction at 7.0
-- **Macro**: 2+ headwinds (yield spike, credit stress, high VIX) → −0.5 to −1.5 conviction
-- **Sector**: Lagging sector → BUY blocked, WATCHLIST → AVOID
-- **Correlation**: Position would push sector exposure >30% → WATCHLIST
-- **Earnings**: Entry blackout <10 days before print
-- **Conviction trend**: −0.3 if trending down >1.5 over 30 days
-- **Mistake patterns**: Learned from closed losses (e.g., "entering at RSI>68") → −0.5 to −1.0
-
-### Swing Entry Pipeline (Three-Tier Funnel)
-
-```
-~450 tickers (S&P500 + Nasdaq100)
-    ↓ momentum pre-filter (top 150 by 60d return)
-    ↓ 7 numerical signals (volume, strength, structure, catalyst, narrative, insider, squeeze)
-    ↓ chart vision (Claude Vision on 4+/7 candidates)
-    ↓ auto-entry gates (R/R ≥2.0, price in entry zone, no earnings blackout)
-~5-15 positions
-```
-
-**7 Signals:**
-| Signal | Fires When |
+| | Cost |
 |---|---|
-| volume_accumulation | 20d vol ≥1.2x 90d avg |
-| relative_strength | outperforming sector ETF & SPY |
-| price_structure | Stage 2, near 52-week high |
-| catalyst_proximity | earnings 14-35d out (needs +2 other signals) |
-| narrative_momentum | ≥75% beat rate, >5% surprise, >10% YoY revenue |
-| insider_buying | net bullish or CEO/CFO buying |
-| short_squeeze | short float ≥10%, RSI>50, Stage 2 |
+| Market data (yfinance, all of it) | $0 |
+| Daily scan LLM (deep-scan analysis + chart vision ~45–55 charts) | ≈ $1.50–2/day |
+| Sunday (Haiku sentiment for 126 tickers; everything else is math or subscription-covered) | < $0.10/week |
+| **Total** | **≈ $35–45/month** |
 
----
+Rules learned in production (see EXPERIMENTS.md incidents): budget approvals are
+one-time and purpose-specific; any paid-API loop must prove its save path on unit
+one and abort on failure after a paid call.
 
-## Daily Automated Schedule
+## Dashboard
 
-**Managed via Claude Code's `mcp__scheduled-tasks`** (runs while app is open)
+`PYTHONPATH=. .venv/bin/python -m uvicorn dashboard.app:app --host 127.0.0.1 --port 8000`
 
-| Task | Time | What It Does |
-|---|---|---|
-| `equitylens-universe-refresh` | Sun 7 AM | Live scrape S&P500 + Nasdaq100, liquidity filter, rebuild universe cache |
-| `equitylens-weekly-review` | Sun 8 AM | Sentiment cache refresh (yfinance + Haiku), sector funnel, outcome review, SPY baseline |
-| `equitylens-daily-scan` | 9:35 AM (Mon-Fri) | Deep pipeline on 60-80 weekly universe stocks, swing scan on full 450, auto-exits, stop re-eval |
-| `equitylens-decision-capture` | 4:30 PM (Mon-Fri) | "Did you invest?" prompt for manual verification of BUY signals |
-| `equitylens-paper-report` | 5 PM (Mon-Fri) | Evening P&L summary |
+| Tab | Shows |
+|---|---|
+| Signals | BUY/WATCHLIST/AVOID + swing candidates with chart verdicts |
+| Swing / Long-Term | Positions, exit alerts, chart modals; LT has the 👁 Shadow Tracking panel |
+| Portfolio | Unified positions + **Closed Trades** (realized P&L with exit reasons) |
+| Decisions | Date-wise activity log |
+| Weekly Review | Sector funnel + ⚡ accel radar + 📊 5-year sector backtest + feedback/mistake panels |
+| **Super Performers ★** | Discovery shortlist: company names, RS percentile, 52w positioning, dossier status |
 
-**Dashboard:** `dashboard/app.py` (Uvicorn FastAPI server, runs on port 8000)
+## Manual commands
 
----
+```bash
+# Daily scan / swing scan / weekly funnel
+PYTHONPATH=. .venv/bin/python workflows/daily_scan.py
+PYTHONPATH=. .venv/bin/python workflows/run_swing_scan.py
+PYTHONPATH=. .venv/bin/python workflows/weekly_scan.py
 
-## Key Data Files
+# Discovery scan (mid/small caps)
+PYTHONPATH=. .venv/bin/python core/discovery.py
+
+# Backtests
+PYTHONPATH=. .venv/bin/python -c "from core.sector_backtest import run_backtest; run_backtest()"
+PYTHONPATH=. .venv/bin/python -c "from core.strategy_backtest import run_all; run_all()"
+PYTHONPATH=. .venv/bin/python -c "from core.strategy_backtest import trend_template_backtest; trend_template_backtest()"
+
+# Sentiment cache refresh (Sunday's job, manual)
+PYTHONPATH=. .venv/bin/python workflows/bigdata_refresh.py [--status]
+```
+
+## Key data files
 
 ```
 data/
-  daily_scan_2026-07-07.json          Full scan output (65+ deep results, swing candidates)
-  swing_candidates_2026-07-07.json    Charted swing setups ready for entry
-  paper_portfolio.json                LT paper holdings ($3.5k allocation)
-  growth_portfolio.json               Swing paper holdings ($1.5k allocation)
-  swing_positions.json                Manual swing position tracking
-  longterm_positions.json             Manual LT position tracking
-  screen_performance.json             Feedback loop: signal outcomes for each screen
-  mistake_log.json                    Learned patterns from closed losses
-  signal_outcomes.jsonl               Historical signal-to-30/90d-return tracking
-  swing_charts/{ticker}_{date}.png    Daily swing chart (120d OHLCV)
-  swing_charts/{ticker}_LT_{date}.png Weekly LT chart (1y OHLCV)
-  pnl_history_*.json                  Daily portfolio snapshots (P&L tracking)
-  bigdata_cache/{ticker}.json         Sentiment cache: yfinance news + Haiku scoring (refreshed Sunday)
-  universe_cache.json                 Live S&P500 + Nasdaq100 constituents (7d TTL)
-  ohlcv_cache_{date}.parquet          Batch OHLCV for prefilter (one yfinance call)
-  weekly_universe_{date}.json         Sector funnel output (deep scan universe)
+  universe_cache.json             ~458 tickers, 7d TTL (stale fallback up to 21d)
+  weekly_universe_{date}.json     Sunday funnel output (deep scan reads all week)
+  ohlcv_cache_{date}.parquet      Daily 400d batch OHLCV — one download serves
+                                  prefilter, charts, S/R, trend template
+  trend_template_{date}.json      Daily Minervini template flags + RS percentiles
+  swing_candidates_{date}.json    Swing scan output incl. chart verdicts
+  discovery_{date}.json           Super-Performer shortlist (Sundays)
+  dossiers/{ticker}.md            One-time company research, dated deltas appended
+  paper_portfolio.json            LT paper portfolio     growth_portfolio.json  Swing
+  paper_trades.jsonl / growth_trades.json   Full trade logs (Closed Trades tab)
+  signal_outcomes.jsonl           Every signal + shadow trade, scored 30/90d
+  screen_performance.json         Feedback records with strict:*/source:* tags
+  swing_gate_state.json           E7 gate adaptation state + decision history
+  sector_ranking_log.jsonl        E9 live formula race (all challengers, weekly)
+  sector_backtest.json            E9 5y backtest + walk-forward (dashboard panel)
+  mistake_log.json                Learned loss patterns
+  bigdata_cache/{ticker}.json     Weekly sentiment (yfinance + Haiku — no paid APIs)
 ```
 
----
+## Known gotchas
 
-## Dashboard Tabs
-
-| Tab | Shows | Source |
-|---|---|---|
-| **Signals → Long-Term** | BUY/WATCHLIST/AVOID results | `/api/scan` |
-| **Signals → Swing/Spec** | 7-signal candidates with chart analysis | `/api/swing/candidates` |
-| **Swing** | Open swing positions + exit alerts | `/api/swing/positions` + `/api/swing/candidates` |
-| **Long-Term** | Open LT positions + conviction | `/api/longterm/positions` + `/api/paper/portfolio` |
-| **Portfolio** | All positions (unified), track breakdown, P&L | `/api/capital/overview` |
-| **Closed Trades** | Realized trade history (entry, exit, P&L, reason) | `/api/trades/closed` |
-| **Decisions** | Daily activity log (BUY signals, exits, errors) | `/api/decisions/daily-log` |
-| **Weekly Review** | Sector funnel, outcome review, missed opportunities | `/api/scan/weekly` + `/api/review/weekly` |
+- **yfinance rate limits**: never per-ticker loops over the universe — one batch
+  `yf.download`. The parquet cache exists for this.
+- **Silent `except: pass`** has repeatedly hidden dead signals and skipped
+  microsectors. A signal that never fires is a bug until proven otherwise.
+- **Paid-API loops**: prove the save path with one unit before looping; abort on
+  any failure after a paid call (see the E13 incident).
+- Dashboard restart after backend changes: `pkill -f "uvicorn dashboard.app"`
+  (launchd resurrects it) + hard-refresh the browser.
+- Wikipedia scrape needs `verify=False` on this machine.
 
 ---
 
-## Running Locally
-
-### Prerequisites
-- Python 3.10+
-- Virtual environment (`.venv`)
-- Dependencies: `pip install -r requirements.txt`
-
-### Setup
-```bash
-cd /Users/sohampatil/Documents/Projects/equitylens
-
-# Create virtual environment (if not already present)
-python3 -m venv .venv
-source .venv/bin/activate
-
-# Install dependencies
-pip install -r requirements.txt
-```
-
-### Start Dashboard
-```bash
-PYTHONPATH=. .venv/bin/python -m uvicorn dashboard.app:app --reload --host 127.0.0.1 --port 8000
-```
-Then open: http://127.0.0.1:8000
-
-### Manual Workflows
-```bash
-# Run today's daily scan (full pipeline)
-PYTHONPATH=. .venv/bin/python workflows/daily_scan.py
-
-# Weekly sector funnel
-PYTHONPATH=. .venv/bin/python workflows/weekly_scan.py
-
-# Swing scan only (full universe prefilter)
-PYTHONPATH=. .venv/bin/python workflows/run_swing_scan.py
-
-# Weekly outcome review
-PYTHONPATH=. .venv/bin/python workflows/outcome_review.py
-
-# Backtest signal outcomes
-PYTHONPATH=. .venv/bin/python workflows/run_backtest.py
-
-# Force universe rebuild (ignore 7-day cache)
-PYTHONPATH=. .venv/bin/python -c "from core.universe import build_universe; build_universe(force_refresh=True)"
-```
-
----
-
-## Key Insights & Design Decisions
-
-### Stop Loss Formula (Both Tracks)
-```
-stop = max(S1 − 0.5×ATR, entry − 2.5×ATR)
-```
-- **S1** = nearest tested support (5-bar swing lows, 1.5% clustering)
-- **0.5×ATR buffer** = survives stop hunts / liquidity sweeps
-- **2.5×ATR floor** = caps risk when nearest support is far below
-
-Weekly re-evaluation: if a new support forms above current stop, raise it (never lower).
-
-### No Parallel Pipelines
-Swing and speculative entries flow through **one unified pipeline** (`daily_scan.py`). Both the 7-signal screener and Growth Hunter scoring convert results to `SwingSignal` objects → same chart-vision gate → same auto-entry authority. This ensures:
-- Consistent entry rules regardless of signal source
-- No bypass of earnings blackout or risk caps
-- Single feedback loop for learning
-
-### Feedback Loop (Learning from Losses)
-- At signal time: record entry price, screens matched, Hunter score, RSI, chart pattern
-- At exit time: record exit price, reason, P&L, hold days → outcome (WIN/LOSS/SCRATCH)
-- Weekly: scan for patterns (high RSI entries, low-score swings, weak chart confidence, single-screen confluence)
-- Active: mistake patterns penalize new candidates matching lost-trade conditions (e.g., "−0.5 conviction if Hunter<5.5 on swings")
-
-### Why Conviction Caps Don't Auto-Demote Signals (Fixed July 7)
-Valuation, macro, and mistake-pattern gates cap conviction (e.g., OVERVALUED → 7.0). This does NOT automatically flip the signal to WATCHLIST — you must **re-check the threshold** after every adjustment. Otherwise OVERVALUED stocks (MOS −100%) stay BUY, macro headwinds are ignored, and learned loss patterns don't prevent re-entry.
-
----
-
-## Known Gotchas
-
-- **yfinance rate limits**: Never fetch per-ticker in a loop — use one batch `yf.download(list, ...)`. The parquet cache exists for this.
-- **yfinance `.calendar` format**: Returns a dict on current versions; earnings dates are `datetime.date` objects (no `.date()` method needed).
-- **Split risk**: Position stores raw shares/entry; unhandled splits read as crashes. Split guards check and adjust.
-- **Sentiment cache refresh**: Runs Sunday only via `workflows/bigdata_refresh.py` (yfinance + Claude Haiku, ~$0.03/week — the paid BigData.com MCP was replaced June 2026). Daily scans read from cache files (`data/bigdata_cache/{ticker}.json`).
-- **Dashboard restart**: After editing core/*.py, restart the dashboard (`pkill -f "uvicorn dashboard.app"`). Hard-refresh browser (Cmd+Shift+R).
-
----
-
-## Architecture Overview
-
-```
-workflows/
-  daily_scan.py          Main entry point (9:35 AM, Mon-Fri)
-  weekly_scan.py         Sector funnel (Sunday 8 AM)
-  outcome_review.py      Feedback loop review (Sunday)
-  run_backtest.py        Historical validation
-
-core/
-  orchestrator.py        Chain all 7 agents, apply gates
-  hunter.py              Fundamental + technical scoring (0-10)
-  critic.py              Red flags & kill switches
-  sentiment.py           BigData sentiment + narrative
-  validator.py           Signal consolidation
-  portfolio_manager.py   Sizing logic
-  scout.py               Sector funnel
-  data_layer.py          yfinance, BigData, price/volume/FCF
-  stop_loss.py           Stop tier calculation & re-eval
-  conviction.py          Conviction formula + trend tracking
-  feedback.py            Signal outcomes, mistake patterns, learning
-  position_store.py      Unified position tracking
-  paper_trading.py       LT portfolio ($3.5k), auto-execute BUYs & stops
-  growth_paper_trading.py Swing portfolio ($1.5k), trailing stops, trims
-  swing_chart_analysis.py Chart vision pipeline (Claude Vision)
-  universe.py            S&P500/Nasdaq100 constituent fetching
-  sector_map.py          Sector definitions & micro-sectors
-  screener.py            7 numerical signals + adaptive sizing
-  valuation.py           Graham formula + sector-PE fair value
-  macro_pulse.py         10Y yield, DXY, credit spread overlay
-  earnings_calendar.py   Earnings dates & blackout logic
-  correlation.py         Sector concentration limits
-  bias_check.py          Behavioral bias detection
-  
-agents/
-  hunter.py, critic.py, sentiment.py, validator.py, portfolio_manager.py, scout.py, journal.py
-
-dashboard/
-  app.py                 FastAPI server (Uvicorn)
-  templates/index.html   React-style dashboard UI
-  static/                CSS/JS assets
-```
-
----
-
-## Trading Philosophy
-
-> **Discipline beats intuition; process beats prediction.**
-
-EquityLens does not predict market direction. It:
-1. Identifies setups that align with technical + fundamental + sentiment confluence
-2. Sizes positions based on conviction, not conviction — smaller when signal is weaker
-3. Lets stops enforce risk management — never holds a bad setup on hope
-4. Learns from losses — patterns that trigger repeat losses penalize similar future setups
-5. Automates routine execution — so the human can focus on the exceptions
-
----
-
-## Future Enhancements
-
-- Real-time alerts for stop/limit fills
-- Integration with live brokers (Alpaca, Interactive Brokers)
-- Multi-timeframe confirmation (daily + weekly alignment)
-- Sector rotation automation (rebalance weights vs SPY)
-- Advanced options strategies for income on held positions
-
----
-
-## Support & Questions
-
-For issues, improvements, or questions, please open an issue on GitHub or refer to the inline code documentation in `CLAUDE.md`.
-
----
-
-**Last Updated:** July 7, 2026  
-**Author:** Soham Patil  
-**License:** MIT
+**Started:** June 2026 · **Author:** Soham Patil · **License:** MIT
+For the full decision history, read `EXPERIMENTS.md` — it is the project's memory.

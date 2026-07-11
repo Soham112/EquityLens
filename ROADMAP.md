@@ -1,5 +1,9 @@
 # EquityLens — Platform Roadmap & Design Decisions
 
+> This file is the original design vision (June 2026). For what actually got
+> built, what worked, and what the evidence changed, read **EXPERIMENTS.md** —
+> the living decision log — and README.md for the current architecture.
+
 ## Vision
 A self-improving AI equity research platform with two parallel trading tracks:
 - **Long-term holdings** — fundamentals-driven, DCA-funded, conviction-based
