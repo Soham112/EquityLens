@@ -112,8 +112,9 @@ core/
                          Hunter's 50/30/20 weights by 90d hit rates (bounds 0.10–0.65)
   macro_pulse.py         Macro overlay: 10Y yield (^TNX), DXY, HYG/LQD credit spread, Fed calendar.
                          2+ headwinds → conviction penalty 0.5–1.5. Cached data/macro_pulse_{date}.json
-  chart_refresh.py       Re-runs vision on swing candidates >3d old; marks STALE if entry→wait
-                         or R/R <1.5. Called after swing scan in daily_scan
+  chart_refresh.py       Re-runs vision on 3+/7 swing candidates >3d old (2/7 never re-charted —
+                         cost cap 2026-07-10; entries/stops trigger off saved numeric levels daily);
+                         marks STALE if entry→wait or R/R <1.5. Called after swing scan in daily_scan
   chart_renderer.py      (legacy) candlestick PNG via mplfinance for chart_vision agent
   vision_cache.py        Smart invalidation cache for chart_vision agent (weekly/daily hunter charts)
 
