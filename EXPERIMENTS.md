@@ -32,9 +32,11 @@ that's what keeps this log honest.
 - **Why an exit and not an entry:** the book's high-P/E case studies are survivorship-
   biased, so high P/E is unsafe as a *buy* signal. As a topping signal on names already
   held for other reasons there's no graveyard sampling — pure position management.
-- **Known limitation:** deceleration is proxied by *revenue* trend until E17 lands a
-  direct quarterly-EPS-growth-velocity signal; swap the co-condition to EPS then.
-  Only names entered after 2026-07-11 carry a `breakout_pe` (no retroactive baseline);
+- **Known limitation:** deceleration is proxied by *revenue* trend. The planned EPS-
+  velocity replacement was tested in E17 and FAILED (no cross-sectional edge), so the
+  revenue-trend proxy stays — a direct EPS swap is not justified unless a future,
+  separately pre-registered EPS formulation earns it. Only names entered after
+  2026-07-11 carry a `breakout_pe` (no retroactive baseline);
   unprofitable names (no trailing P/E) never trigger — correct.
 - **How to judge (pre-registered):** over the next ~20 swing exits, for every position
   that fires `PE_EXPANSION_TOP`, measure the forward 10- and 20-trading-day return from
@@ -46,7 +48,7 @@ that's what keeps this log honest.
 - **Status: OBSERVING (live since 2026-07-11).** No fires yet — the two open growth
   positions predate the `breakout_pe` field.
 
-### E17 — Earnings-growth velocity as a scored entry factor (BACKTEST FIRST, not shipped)
+### E17 — Earnings-growth velocity as a scored entry factor (BACKTESTED → FAILED, not shipped)
 - **Hypothesis:** Minervini's actual superperformance driver is *earnings* growth
   ("Apollo earning 40% per annum… the P/E takes care of itself"), but
   `growth_hunter._score_revenue` scores **revenue** growth + acceleration and margins —
@@ -63,8 +65,34 @@ that's what keeps this log honest.
   higher forward hit rate / avg return than the current rubric's top decile, era-split
   stable (don't accept a single-era win — same discipline as E11/E14). No paid API in
   the loop (yfinance earnings history only) — respects the vision-backtest cost rule.
-- **Status: NOT STARTED** — entry pre-registered 2026-07-11; backtest to be built and
-  run before any change to `growth_hunter` scoring.
+- **Backtest built & run 2026-07-11** (`core/eps_velocity_backtest.py`, yfinance-only;
+  caches to `data/e17_{prices.parquet,eps.json}`, delete to re-fetch):
+  GROWTH_UNIVERSE (61 names), 40 quarter-start rebalances 2016-2025. Point-in-time EPS
+  from `get_earnings_dates()` (Reported EPS tagged with actual report date; only quarters
+  reported *before* each rebalance used — no lookahead). Per date, ranked candidates with
+  ≥5 clean quarters (positive year-ago base) three ways: **EQL** (universe avg, no factor),
+  **YoY** (top quintile by EPS-growth level), **VELO** (top quintile by EPS *acceleration* —
+  the factor on trial). 864 (date,ticker) records. Top-quintile used (universe too small
+  for a decile) — a documented deviation from the pre-registered "top decile."
+- **RESULT — FAILED.** fwd63 mean return, VELO vs the universe average it had to beat:
+  overall 5.43% vs **5.90%**; 2016-2020 7.33% vs **7.56%**; 2021-2026 3.91% vs **4.66%** —
+  VELO **loses to plain equal-weight in BOTH eras** and beat EQL in only **4/10 years**
+  (and beat the simpler YoY factor in only 4/10). Its `beatEQL%` stayed 38-42% (a velocity
+  pick beat the universe avg <half the time). VELO's *mean* looked higher at fwd126
+  (14.8% vs 13.6%) but its *median* was far worse (0.4% vs 3.9%) with lower hit rate —
+  outlier-driven, not a robust edge. Fails the pre-registered primary test outright.
+- **Decision: do NOT wire EPS-velocity into `growth_hunter`.** Same lesson as E14 — a
+  plausible Minervini-flavored rule that history rejects. Backtest-first paid off: zero
+  production risk taken. E16's revenue-trend deceleration proxy therefore stays as-is
+  (no EPS-velocity replacement earned its place).
+- **Caveats (honest bounds, none rescue the result):** (1) universe is today's
+  survivorship-biased list — inflates absolute returns but hits all three strategies
+  equally, so the *relative* null stands; (2) factor only scores profitable names with a
+  positive year-ago base (correct scoping to the compounder case), leaving ~864 records;
+  (3) any different formulation (smoothed 3-qtr slope, velocity×level interaction) would
+  be a NEW pre-registered experiment, not a reinterpretation of this one — no post-hoc
+  fishing.
+- **Status: FAILED (backtested 2026-07-11, not shipped).**
 
 ### E7 — Swing exploration mode: loosened, self-adapting entry gates
 - **Date started:** 2026-07-08
