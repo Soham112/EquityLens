@@ -804,7 +804,14 @@ async def discovery():
     import sys
     sys.path.insert(0, str(Path(__file__).parent.parent))
     from core.discovery import load_latest_discovery
-    return load_latest_discovery()
+    from core.dossier import read_verdict
+    result = load_latest_discovery()
+    # Surface each name's dossier verdict (ADMIT/WATCH/PASS/PENDING) on the screen
+    for row in result.get("shortlist", []):
+        v = read_verdict(row.get("ticker", ""))
+        row["verdict"] = v["status"]
+        row["verdict_text"] = v["text"]
+    return result
 
 
 @app.get("/api/discovery/dossier/{ticker}")

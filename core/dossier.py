@@ -33,6 +33,38 @@ PENDING_MARKER = "PENDING RESEARCH"
 _PENDING_VERDICT = f"_{PENDING_MARKER} — not yet reviewed (ADMIT / WATCH / PASS)._"
 
 
+def read_verdict(ticker: str) -> dict:
+    """Extract the dossier's Verdict for the Super-Performers screen.
+    Returns {status, text} — status ∈ ADMIT | WATCH | PASS | PENDING | NONE."""
+    p = os.path.join(DOSSIER_DIR, f"{ticker}.md")
+    if not os.path.exists(p):
+        return {"status": "NONE", "text": ""}
+    try:
+        lines = open(p).read().splitlines()
+    except Exception:
+        return {"status": "NONE", "text": ""}
+    for i, line in enumerate(lines):
+        if line.strip().lower() == "## verdict":
+            for nxt in lines[i + 1:]:
+                t = nxt.strip().strip("_").strip()
+                if not t:
+                    continue
+                up = t.upper()
+                if PENDING_MARKER in up:
+                    status = "PENDING"
+                elif up.startswith("ADMIT"):
+                    status = "ADMIT"
+                elif up.startswith("WATCH"):
+                    status = "WATCH"
+                elif up.startswith("PASS"):
+                    status = "PASS"
+                else:
+                    status = "NONE"
+                return {"status": status, "text": t}
+            break
+    return {"status": "NONE", "text": ""}
+
+
 def needs_research(ticker: str) -> bool:
     """True if a dossier exists but its Verdict is still the PENDING sentinel —
     i.e. the skeleton is written but the Sunday agent hasn't researched it yet."""
