@@ -402,9 +402,23 @@ that's what keeps this log honest.
 - **How to judge:** (a) live signal — price_structure's per-screen hit rate
   pre/post 2026-07-10 cohorts; (b) discovery — track shortlist names' forward
   performance and whether any graduate to growth_universe entries that win.
-  Phase 2 (dossiers via Sunday web research, $0) and Phase 3 (Haiku catalyst
-  classifier) queued.
-- **Status: OBSERVING.**
+  Phase 3 (Haiku catalyst classifier) queued.
+- **Phase 2 SHIPPED (2026-07-12) — composed, not parallel:** `core/dossier.py`
+  writes a $0 data-skeleton dossier (metrics, fundamentals, technicals, risk
+  flags) for every shortlist name during `discovery_scan`, leaving research +
+  Verdict marked `PENDING RESEARCH`. Weekly-review STEP 2.5 was rewritten to
+  FILL those sections in-place (gate = `needs_research()`/PENDING marker, was
+  "missing file") and keep the ADMIT→growth_universe wiring. Dashboard: the
+  Super-Performers "Dossier" 📁 is now a clickable viewer
+  (`/api/discovery/dossier/{ticker}`). No paid API; touches no gate/threshold/score.
+- **First full research pass (2026-07-12, 15 names):** 7 ADMIT → growth_universe
+  (PENG, SEZL, DAVE, ACMR, LQDA, EXTR, VCYT — genuine accelerating growth), 5 WATCH
+  (FTRE/PGNY turnaround-or-modest, ICHR/NEO cyclical/unprofitable, TWLO oversized),
+  3 PASS. The 3 PASSes are the research layer earning its keep — all passed the
+  technical screen but aren't superperformers: **OGN** (Sun Pharma $4B buyout) and
+  **AVNS** (AIP $1.27B take-private) are M&A premiums, **AMN** (+100% rev) is
+  one-time strike/labor-disruption revenue management guides to normalize down.
+- **Status: OBSERVING** (track whether the 7 admits win vs the WATCH/PASS set).
 
 ## Settled experiments
 

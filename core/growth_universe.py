@@ -105,6 +105,15 @@ GROWTH_UNIVERSE: list[tuple[str, str]] = [
     ("IONQ",  "technology"),        # IonQ — trapped ion quantum computing
     ("RGTI",  "technology"),        # Rigetti Computing — superconducting quantum
     ("QBTS",  "technology"),        # D-Wave — quantum annealing (added 2026-07-09)
+
+    # ── Discovery admits (E15 Phase 2, weekly-review dossier ADMITs 2026-07-12) ──
+    ("PENG",  "ai_infrastructure"), # Penguin Solutions — AI integrated memory, +48% rev double beat
+    ("SEZL",  "fintech"),           # Sezzle — profitable BNPL compounder, 30%+ growth
+    ("DAVE",  "fintech"),           # Dave — neobank, +47% rev, improving credit
+    ("ACMR",  "semiconductors"),    # ACM Research — wafer-clean equip, +34% rev (China risk)
+    ("LQDA",  "biotech"),           # Liquidia — YUTREPIA PAH launch ramp (~$130M Q1)
+    ("EXTR",  "technology"),        # Extreme Networks — AI cloud networking, SaaS ARR +29%
+    ("VCYT",  "biotech"),           # Veracyte — oncology diagnostics, +26% testing rev
 ]
 
 # Deduplicate while preserving order

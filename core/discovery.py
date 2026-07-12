@@ -96,11 +96,24 @@ def discovery_scan() -> dict:
             continue
 
     rows.sort(key=lambda r: -r["rs_pct"])
+    shortlist = rows[:SHORTLIST_N]
+
+    # Phase 2: build a $0 data-skeleton dossier for each shortlisted name (skips
+    # any that already exist), then refresh the dossier flags so the column is
+    # accurate in the same scan. Never fatal to the screen.
+    try:
+        from core.dossier import generate_dossiers
+        generate_dossiers(shortlist)
+        for r in shortlist:
+            r["dossier"] = os.path.exists(f"data/dossiers/{r['ticker']}.md")
+    except Exception as e:
+        logger.warning(f"[Discovery] dossier generation skipped: {e}")
+
     result = {
         "date": datetime.date.today().isoformat(),
         "universe_size": len(tickers),
         "template_passers": sum(1 for f in flags.values() if f["template_pass"]),
-        "shortlist": rows[:SHORTLIST_N],
+        "shortlist": shortlist,
         "note": "Names only — research candidates for dossiers, never auto-entries. "
                 "Approved names join growth_universe and face the same gates.",
     }

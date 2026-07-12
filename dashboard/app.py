@@ -806,6 +806,21 @@ async def discovery():
     return load_latest_discovery()
 
 
+@app.get("/api/discovery/dossier/{ticker}")
+async def discovery_dossier(ticker: str):
+    """E15 Phase 2: raw markdown of a name's research dossier (data/dossiers/{t}.md)."""
+    t = ticker.upper().strip()
+    # guard against path traversal — ticker chars only
+    if not t.replace("-", "").replace(".", "").isalnum():
+        return JSONResponse({"error": "invalid ticker"}, status_code=400)
+    p = DATA_DIR / "dossiers" / f"{t}.md"
+    if not p.exists():
+        return JSONResponse({"ticker": t, "exists": False,
+                             "markdown": "", "message": "No dossier yet for this name."},
+                            status_code=404)
+    return {"ticker": t, "exists": True, "markdown": p.read_text()}
+
+
 @app.get("/api/backtest/sectors")
 async def backtest_sectors(refresh: bool = Query(default=False)):
     """E9 Phase 1: 5-year sector funnel backtest (cached; refresh=true recomputes)."""

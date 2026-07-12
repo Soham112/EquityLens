@@ -639,6 +639,17 @@
     </div>
 
     <!-- Swing Chart Modal -->
+    <!-- Dossier viewer (E15 Phase 2) -->
+    <div class="modal-overlay" id="dossier-modal" style="display:none;z-index:1100" onclick="if(event.target===this)closeDossierModal()">
+      <div class="modal" style="max-width:760px;width:92vw;max-height:88vh;padding:0;background:#fff;border:1px solid #e5e7eb;border-radius:10px;overflow:hidden;display:flex;flex-direction:column">
+        <div style="background:#faf5ff;padding:14px 18px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #eee">
+          <span id="dossier-title" style="font-size:16px;font-weight:800;color:#6b21a8">Dossier</span>
+          <button onclick="closeDossierModal()" style="background:none;border:none;color:#9ca3af;font-size:22px;cursor:pointer;line-height:1">×</button>
+        </div>
+        <div id="dossier-body" style="padding:18px 22px;overflow-y:auto;font-size:13.5px;line-height:1.5;color:#374151">Loading…</div>
+      </div>
+    </div>
+
     <div class="modal-overlay" id="swing-chart-modal" style="display:none;z-index:1100" onclick="if(event.target===this)closeSwingChartModal()">
       <div class="modal" style="max-width:860px;width:95vw;padding:0;background:#0f1117;border:1px solid #2d3748;border-radius:10px;overflow:hidden">
         <div class="modal-header" style="background:#161b27;padding:14px 18px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #2d3748">
@@ -1664,7 +1675,7 @@
           <td style="padding:8px 4px;text-align:right;color:#6b7280">${(r.pct_off_52w_high*100).toFixed(1)}%</td>
           <td style="padding:8px 4px;text-align:right;color:#16a34a">+${(r.pct_above_52w_low*100).toFixed(0)}%</td>
           <td style="padding:8px 4px;text-align:right;color:#6b7280">$${r.dollar_vol_20d.toFixed(1)}M</td>
-          <td style="padding:8px 8px;text-align:center">${r.dossier ? '📁' : '<span style="color:#d1d5db">pending</span>'}</td>
+          <td style="padding:8px 8px;text-align:center">${r.dossier ? `<span onclick="openDossier('${r.ticker}')" title="View dossier" style="cursor:pointer;font-size:15px">📁</span>` : '<span style="color:#d1d5db">pending</span>'}</td>
         </tr>`;
       });
       html += '</tbody></table>';
@@ -1673,6 +1684,43 @@
     } catch (e) {
       el.innerHTML = '<div style="font-size:12px;color:#dc2626">Could not load discovery data.</div>';
     }
+  }
+
+  // Dossier viewer (E15 Phase 2)
+  async function openDossier(ticker) {
+    const modal = document.getElementById('dossier-modal');
+    document.getElementById('dossier-title').textContent = ticker + ' — Dossier';
+    document.getElementById('dossier-body').innerHTML = '<div style="color:#9ca3af">Loading…</div>';
+    modal.style.display = 'flex';
+    try {
+      const res = await fetch('/api/discovery/dossier/' + encodeURIComponent(ticker));
+      const d = await res.json();
+      document.getElementById('dossier-body').innerHTML = d.exists
+        ? renderMarkdown(d.markdown)
+        : '<div style="color:#9ca3af">' + (d.message || 'No dossier yet.') + '</div>';
+    } catch (e) {
+      document.getElementById('dossier-body').innerHTML = '<div style="color:#dc2626">Could not load dossier.</div>';
+    }
+  }
+  function closeDossierModal() { document.getElementById('dossier-modal').style.display = 'none'; }
+
+  function renderMarkdown(md) {
+    const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    const inline = s => s.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+      .replace(/_([^_]+)_/g, '<em>$1</em>')
+      .replace(/`([^`]+)`/g, '<code style="background:#f3f4f6;padding:1px 4px;border-radius:3px">$1</code>');
+    let html = '', inList = false;
+    const closeList = () => { if (inList) { html += '</ul>'; inList = false; } };
+    for (const line of md.split('\n')) {
+      if (/^# /.test(line)) { closeList(); html += `<h2 style="font-size:17px;color:#6b21a8;margin:2px 0 6px">${inline(esc(line.slice(2)))}</h2>`; }
+      else if (/^## /.test(line)) { closeList(); html += `<h3 style="font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:#9333ea;margin:14px 0 4px">${inline(esc(line.slice(3)))}</h3>`; }
+      else if (/^- /.test(line)) { if (!inList) { html += '<ul style="margin:4px 0 4px 2px;padding-left:18px">'; inList = true; } html += `<li style="margin:2px 0">${inline(esc(line.slice(2)))}</li>`; }
+      else if (/^---/.test(line)) { closeList(); html += '<hr style="border:none;border-top:1px solid #eee;margin:12px 0">'; }
+      else if (line.trim() === '') { closeList(); }
+      else { closeList(); html += `<p style="margin:6px 0">${inline(esc(line))}</p>`; }
+    }
+    closeList();
+    return html;
   }
 
   // ── Sector backtest panel (E9 Phase 1, Weekly Review tab) ──
