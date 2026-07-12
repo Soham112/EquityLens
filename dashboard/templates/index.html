@@ -1392,6 +1392,54 @@
 
     let html = '';
 
+    // Watch-Item Scorecard (collapsible) — self-accountability: did last week's
+    // cautions materialise, and what's on record now. Data served in the review JSON.
+    const wi = review.watch_items || [];
+    const ws = review.watch_scores || {};
+    const wtr = review.watch_track_record || {};
+    if (wi.length || (ws.items && ws.items.length) || wtr.resolved) {
+      const trackStr = (wtr.hit_rate != null)
+        ? `${Math.round(wtr.hit_rate*100)}% all-time (${wtr.hits}/${wtr.resolved})`
+        : 'no scored history yet';
+      const lastStr = ws.resolved ? `${ws.hits}/${ws.resolved} materialised` : 'nothing to score yet';
+      const badge = (o) => {
+        const c = o === 'HIT' ? '#16a34a' : o === 'MISS' ? '#dc2626' : '#9ca3af';
+        return `<span style="font-size:10px;font-weight:700;color:#fff;background:${c};border-radius:3px;padding:1px 6px">${o}</span>`;
+      };
+      const subHead = (t) => `<div style="font-size:11px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#9ca3af;margin:12px 0 6px">${t}</div>`;
+      let body = '';
+      if (ws.items && ws.items.length) {
+        body += subHead(`Last week's cautions — scored vs ${ws.scored_from}`);
+        ws.items.forEach(it => {
+          body += `<div class="review-row">
+            <span class="label">${badge(it.outcome)} <strong>${it.subject}</strong> <span style="color:#9ca3af;font-weight:400">${it.direction}</span></span>
+            <span class="value" style="font-weight:400;font-size:12px;color:#6b7280">${it.detail || ''}</span>
+          </div>`;
+        });
+      } else {
+        body += `<div style="font-size:12px;color:#9ca3af;padding:6px 0">No prior watch-items to score yet${ws.note ? ' — ' + ws.note : ''}.</div>`;
+      }
+      body += subHead('On record this week — scored next review');
+      if (wi.length) {
+        wi.forEach(w => {
+          const dc = w.direction === 'bearish' ? '#dc2626' : '#d97706';
+          body += `<div class="review-row">
+            <span class="label"><strong>${w.subject}</strong> <span style="color:${dc};font-size:11px;font-weight:600;text-transform:uppercase">${w.direction}</span></span>
+            <span class="value" style="font-weight:400;font-size:12px;color:#6b7280">${w.reason || ''}</span>
+          </div>`;
+        });
+      } else {
+        body += `<div style="font-size:12px;color:#9ca3af;padding:6px 0">No cautions flagged this week — clean book.</div>`;
+      }
+      html += `<div class="review-section">
+        <h3 onclick="const b=this.nextElementSibling;b.style.display=b.style.display==='none'?'block':'none'" style="cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:12px">
+          <span>🎯 Watch-Item Scorecard</span>
+          <span style="font-size:11px;font-weight:600;text-transform:none;letter-spacing:0;color:#6b7280">foresight ${trackStr} · last wk ${lastStr} ▾</span>
+        </h3>
+        <div style="display:none">${body}</div>
+      </div>`;
+    }
+
     // Open positions
     if (review.open_positions && review.open_positions.length) {
       html += '<div class="review-section"><h3>Open Positions</h3>';

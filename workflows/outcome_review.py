@@ -78,6 +78,7 @@ class WeeklyReview:
     trade_stats: dict = None            # win rate / expectancy / profit factor from trade logs
     watch_items: list[dict] = None      # this week's checkable cautions (weekly_memory)
     watch_scores: dict = None           # how LAST week's watch-items materialised
+    watch_track_record: dict = None     # all-time watch-item hit rate (foresight scoreboard)
 
     def to_dict(self) -> dict:
         return {
@@ -91,6 +92,7 @@ class WeeklyReview:
             "trade_stats": self.trade_stats or {},
             "watch_items": self.watch_items or [],
             "watch_scores": self.watch_scores or {},
+            "watch_track_record": self.watch_track_record or {},
         }
 
 
@@ -507,12 +509,23 @@ def run_weekly_review() -> WeeklyReview:
     # score how last week's played out. Both saved into the review; fully guarded.
     watch_items: list[dict] = []
     watch_scores: dict | None = None
+    watch_track_record: dict | None = None
     try:
-        from core.weekly_memory import derive_watch_items, score_prior_watch_items
+        from core.weekly_memory import (
+            derive_watch_items, score_prior_watch_items, watch_item_track_record,
+        )
         pos_dicts = [vars(p) for p in position_reviews]
         watch_items = derive_watch_items(today, pos_dicts, sector_snapshot or [])
         watch_scores = score_prior_watch_items(today, pos_dicts, sector_snapshot or [], trade_stats)
+        # Running foresight scoreboard: prior weeks' resolved scorecards + this week's.
+        watch_track_record = watch_item_track_record(today)
         if watch_scores and watch_scores.get("resolved"):
+            watch_track_record["hits"] += watch_scores["hits"]
+            watch_track_record["resolved"] += watch_scores["resolved"]
+            watch_track_record["reviews_with_scores"] += 1
+            watch_track_record["hit_rate"] = round(
+                watch_track_record["hits"] / watch_track_record["resolved"], 3
+            ) if watch_track_record["resolved"] else None
             lines.append("")
             lines.append(f"Last week's watch-items: {watch_scores['hits']}/{watch_scores['resolved']} materialised"
                          + (f", {watch_scores['unresolved']} unresolved" if watch_scores.get("unresolved") else ""))
@@ -532,6 +545,7 @@ def run_weekly_review() -> WeeklyReview:
         trade_stats=trade_stats,
         watch_items=watch_items,
         watch_scores=watch_scores,
+        watch_track_record=watch_track_record,
     )
 
     logger.info("Generating Opus narrative for weekly review...")
