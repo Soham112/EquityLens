@@ -76,6 +76,8 @@ class WeeklyReview:
     summary: str
     sector_snapshot: list[dict] = None  # sector momentum from agents/scout
     trade_stats: dict = None            # win rate / expectancy / profit factor from trade logs
+    watch_items: list[dict] = None      # this week's checkable cautions (weekly_memory)
+    watch_scores: dict = None           # how LAST week's watch-items materialised
 
     def to_dict(self) -> dict:
         return {
@@ -87,6 +89,8 @@ class WeeklyReview:
             "summary": self.summary,
             "sector_snapshot": self.sector_snapshot or [],
             "trade_stats": self.trade_stats or {},
+            "watch_items": self.watch_items or [],
+            "watch_scores": self.watch_scores or {},
         }
 
 
@@ -375,13 +379,18 @@ def _generate_opus_narrative(review: "WeeklyReview") -> Optional[str]:
         logger.debug(f"weekly_memory digest skipped: {e}")
     if prior_ctx:
         payload["prior_weeks_context"] = prior_ctx
+    if getattr(review, "watch_scores", None) and review.watch_scores.get("resolved"):
+        payload["last_week_watch_scorecard"] = review.watch_scores
 
     continuity = (
         "\n\nIf prior_weeks_context is present, use it for CONTINUITY: note where a "
         "position's return is deteriorating or improving across weeks, flag any "
         "sector-regime shift, and explicitly say whether last week's cautions "
         "(last_week_take) actually played out. Treat last_week_take as a claim to "
-        "verify against this week's facts, not as ground truth."
+        "verify against this week's facts, not as ground truth. "
+        "If last_week_watch_scorecard is present, it is the MECHANICAL scoring of "
+        "last week's specific cautions (HIT = the caution materialised, MISS = it "
+        "didn't) — cite it as the platform's own foresight track record."
         if prior_ctx else ""
     )
     user_msg = (
@@ -494,6 +503,22 @@ def run_weekly_review() -> WeeklyReview:
         for a in high_priority:
             lines.append(f"  ⚠  {a}")
 
+    # Watch-item self-accountability: derive this week's checkable cautions, and
+    # score how last week's played out. Both saved into the review; fully guarded.
+    watch_items: list[dict] = []
+    watch_scores: dict | None = None
+    try:
+        from core.weekly_memory import derive_watch_items, score_prior_watch_items
+        pos_dicts = [vars(p) for p in position_reviews]
+        watch_items = derive_watch_items(today, pos_dicts, sector_snapshot or [])
+        watch_scores = score_prior_watch_items(today, pos_dicts, sector_snapshot or [], trade_stats)
+        if watch_scores and watch_scores.get("resolved"):
+            lines.append("")
+            lines.append(f"Last week's watch-items: {watch_scores['hits']}/{watch_scores['resolved']} materialised"
+                         + (f", {watch_scores['unresolved']} unresolved" if watch_scores.get("unresolved") else ""))
+    except Exception as e:
+        logger.debug(f"watch-item scoring skipped: {e}")
+
     fallback_summary = "\n".join(lines)
 
     review = WeeklyReview(
@@ -505,6 +530,8 @@ def run_weekly_review() -> WeeklyReview:
         summary=fallback_summary,
         sector_snapshot=sector_snapshot,
         trade_stats=trade_stats,
+        watch_items=watch_items,
+        watch_scores=watch_scores,
     )
 
     logger.info("Generating Opus narrative for weekly review...")

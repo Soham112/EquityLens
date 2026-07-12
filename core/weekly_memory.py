@@ -130,3 +130,150 @@ def build_context_digest(before_date: str, n: int = 3) -> dict | None:
         f"{len(sector_traj)} sectors, {len(pos_traj)} tracked positions"
     )
     return digest
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Watch-item scoring — the self-accountability layer.
+#
+# Each week we mechanically DERIVE the concrete cautions the review is making
+# (a position at risk, a leading sector that's decelerating), store them, and the
+# NEXT week we SCORE whether each one materialised. Derivation is rule-based (not
+# LLM-parsed) so it's deterministic, testable, and grounded in the same structured
+# facts the narrative sees — no prose parsing, no anchoring.
+#
+# A watch-item is a directional claim with a checkable metric:
+#   position / "bearish" → we expect further weakness (return keeps falling / stop)
+#   sector   / "cooling" → we expect a LEADING+decelerating sector to weaken
+# ══════════════════════════════════════════════════════════════════════════════
+
+_AT_RISK_RETURN = -0.08     # a position down ≥8% is "worth watching"
+
+
+def derive_watch_items(review_date: str, positions: list[dict], sectors: list[dict]) -> list[dict]:
+    """Mechanically extract this week's checkable cautions from the review facts."""
+    items: list[dict] = []
+    for p in positions or []:
+        t = p.get("ticker")
+        if not t:
+            continue
+        ret = p.get("return_pct")
+        status = p.get("stop_status", "NORMAL")
+        alerts = p.get("alerts") or []
+        at_risk = (status not in (None, "NORMAL")) or (ret is not None and ret <= _AT_RISK_RETURN) or bool(alerts)
+        if at_risk:
+            items.append({
+                "id": f"pos:{t}", "kind": "position", "subject": t,
+                "direction": "bearish", "metric": "return_pct",
+                "baseline": round(ret, 4) if ret is not None else None,
+                "reason": (alerts[0] if alerts else f"{_pct(ret)}, stop {status}"),
+                "created": review_date,
+            })
+    for s in sectors or []:
+        name = s.get("sector")
+        notes = (s.get("notes") or "").lower()
+        if name and s.get("rotation_rank") == "LEADING" and "decelerat" in notes:
+            items.append({
+                "id": f"sec:{name}", "kind": "sector", "subject": name,
+                "direction": "cooling", "metric": "return_60d",
+                "baseline": s.get("return_60d"), "rank_baseline": "LEADING",
+                "reason": f"LEADING but decelerating (60d {_pct(s.get('return_60d'))})",
+                "created": review_date,
+            })
+    return items
+
+
+def _find_closed_pnl(trade_stats: dict, ticker: str):
+    """Realized P&L for a ticker from this week's trade_stats, or None if not found."""
+    if not trade_stats:
+        return None
+    for track in ("long_term", "swing"):
+        for tr in (trade_stats.get(track) or {}).get("trades", []) or []:
+            if tr.get("ticker") == ticker and tr.get("realized_pnl") is not None:
+                return tr["realized_pnl"]
+    return None
+
+
+def score_prior_watch_items(before_date: str, positions: list[dict],
+                            sectors: list[dict], trade_stats: dict | None = None) -> dict | None:
+    """Score the most recent prior review's watch-items against THIS week's facts.
+    Returns None if there is no prior review at all."""
+    priors = load_recent_reviews(before_date, n=1)
+    if not priors:
+        return None
+    prev = priors[0]
+    prior_items = prev.get("watch_items") or []
+    base = {"scored_from": prev.get("review_date"), "items": [],
+            "resolved": 0, "hits": 0, "unresolved": 0, "hit_rate": None}
+    if not prior_items:
+        base["note"] = "prior review stored no watch-items (feature was newer) — scoring starts next week"
+        return base
+
+    pos_by = {p.get("ticker"): p for p in (positions or [])}
+    sec_by = {s.get("sector"): s for s in (sectors or [])}
+    scored, hits, resolved, unresolved = [], 0, 0, 0
+
+    for it in prior_items:
+        subj, kind, b = it.get("subject"), it.get("kind"), it.get("baseline")
+        outcome, current, detail = "UNRESOLVED", None, ""
+
+        if kind == "position":
+            cur = pos_by.get(subj)
+            if cur is not None:
+                current = cur.get("return_pct")
+                if current is not None and b is not None:
+                    if current < b - 1e-9:      # bearish call: expected further decline
+                        outcome, detail = "HIT", f"{_pct(b)} → {_pct(current)} (fell further)"
+                    else:
+                        outcome, detail = "MISS", f"{_pct(b)} → {_pct(current)} (held / recovered)"
+            else:                               # exited since last week
+                pnl = _find_closed_pnl(trade_stats, subj)
+                if pnl is not None:
+                    current = pnl
+                    outcome = "HIT" if pnl < 0 else "MISS"
+                    detail = f"closed at a {'loss' if pnl < 0 else 'gain'} (${pnl:.0f})"
+                else:
+                    detail = "no longer held; outcome unclassified"
+
+        elif kind == "sector":
+            cur = sec_by.get(subj)
+            if cur is not None:
+                current, rank = cur.get("return_60d"), cur.get("rotation_rank")
+                cooled = (current is not None and b is not None and current < b) or (rank != "LEADING")
+                outcome = "HIT" if cooled else "MISS"
+                detail = (f"60d {_pct(b)} → {_pct(current)}, rank {rank}"
+                          if cooled else f"still hot: 60d {_pct(current)}, {rank}")
+            else:
+                detail = "sector missing from this week's snapshot"
+
+        if outcome == "HIT":
+            hits += 1; resolved += 1
+        elif outcome == "MISS":
+            resolved += 1
+        else:
+            unresolved += 1
+        scored.append({
+            "subject": subj, "kind": kind, "direction": it.get("direction"),
+            "reason": it.get("reason"), "baseline": b,
+            "current": current, "outcome": outcome, "detail": detail,
+        })
+
+    result = {"scored_from": prev.get("review_date"), "items": scored,
+              "resolved": resolved, "hits": hits, "unresolved": unresolved,
+              "hit_rate": round(hits / resolved, 3) if resolved else None}
+    logger.info(f"[WeeklyMemory] watch-item scorecard vs {prev.get('review_date')}: "
+                f"{hits}/{resolved} materialised ({unresolved} unresolved)")
+    return result
+
+
+def watch_item_track_record(before_date: str, n: int = 12) -> dict:
+    """Running watch-item hit rate over the last n reviews' stored scorecards —
+    the platform's foresight track record."""
+    H = R = weeks = 0
+    for r in load_recent_reviews(before_date, n):
+        ws = r.get("watch_scores") or {}
+        if ws.get("resolved"):
+            weeks += 1
+            H += ws.get("hits", 0)
+            R += ws.get("resolved", 0)
+    return {"reviews_with_scores": weeks, "hits": H, "resolved": R,
+            "hit_rate": round(H / R, 3) if R else None}
