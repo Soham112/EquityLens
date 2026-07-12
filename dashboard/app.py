@@ -541,6 +541,7 @@ async def growth_portfolio():
                 "sector": pos.sector,
                 "stop_price": pos.stop_price,
                 "peak_price": pos.peak_price,
+                "source": getattr(pos, "source", "screener"),
             }
             for t, pos in sorted(p.positions.items(), key=lambda x: -x[1].return_pct)
         ],

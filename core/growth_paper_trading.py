@@ -48,6 +48,7 @@ class GrowthPosition:
     peak_price: Optional[float] = None
     stop_price: Optional[float] = None # hard stop or trailing stop level
     breakout_pe: Optional[float] = None # trailing P/E at entry — baseline for E16 P/E-expansion topping exit
+    source: str = "screener"          # "discovery" = sourced from the E15 Super-Performer pipeline
     trims_taken: list[str] = field(default_factory=list)  # each profit-take level fires once
 
     @property
@@ -385,10 +386,14 @@ def auto_enter_swing_signals(swing_signals: list) -> list[str]:
 
         if execute_buy(s.ticker, getattr(s, "sector", "swing"), float(score),
                        signal="SWING AUTO", size_dollars=size):
-            # Override the default -25% stop with the chart-derived stop
+            # Override the default -25% stop with the chart-derived stop, and
+            # stamp discovery-sourced names so the portfolio can badge them.
             p = load_growth_portfolio()
-            if chart_stop and s.ticker in p.positions:
-                p.positions[s.ticker].stop_price = round(float(chart_stop), 4)
+            if s.ticker in p.positions:
+                if chart_stop:
+                    p.positions[s.ticker].stop_price = round(float(chart_stop), 4)
+                if s.ticker in discovery_admitted:
+                    p.positions[s.ticker].source = "discovery"
                 _save_growth_portfolio(p)
             # Open a feedback-loop record with the actual fill price so the
             # exit can be scored (WIN/LOSS + mistake patterns) later

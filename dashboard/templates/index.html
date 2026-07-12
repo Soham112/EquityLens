@@ -943,6 +943,7 @@
         gain_pct: p.return_pct, invested_dollars: p.entry_price * p.shares,
         market_value: p.market_value, unrealized_pnl: p.unrealized_pnl,
         stop_price: p.stop_price || null, thesis: '',
+        superperformer: p.source === 'discovery',
       }));
 
     _allPositions = [...swingRows, ...ltRows, ...paperRows, ...growthRows];
@@ -1022,7 +1023,7 @@
       const thesis = (p.pattern_thesis || p.thesis || '').slice(0, 60) || '—';
 
       return `<tr style="border-bottom:1px solid #f3f4f6;transition:background .1s;cursor:pointer" onmouseover="this.style.background='#fafafa'" onmouseout="this.style.background=''" onclick="openSwingChartModal('${p.ticker}')" title="Click for chart analysis">
-        <td style="padding:12px 16px;font-weight:700">${p.ticker}</td>
+        <td style="padding:12px 16px;font-weight:700">${p.ticker}${p.superperformer ? ' <span title="Sourced from the Super-Performer discovery pipeline" style="font-size:10px;font-weight:700;color:#9333ea;background:#f3e8ff;border-radius:3px;padding:1px 6px;margin-left:6px;white-space:nowrap">★ Super Performer</span>' : ''}</td>
         <td style="padding:12px;text-align:center">${trackBadge}</td>
         <td style="padding:12px;text-align:right;color:#6b7280">$${(p.entry_price||0).toFixed(2)}</td>
         <td style="padding:12px;text-align:right;font-weight:600">$${(p.current_price||0).toFixed(2)}</td>
