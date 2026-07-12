@@ -132,8 +132,12 @@ def _review_open_positions() -> tuple[list[PositionReview], list[str]]:
             logger.warning(f"{ticker}: price unavailable")
             continue
 
-        # Update stored price
-        update_position(ticker, current_price=current_price)
+        # Update stored price — persistence-store positions only. Paper-trading
+        # positions are merged in for review but live in paper_portfolio.json;
+        # paper_trading.daily_update() owns their prices, so writing them here
+        # just no-ops with a "not in portfolio" warning (source drift).
+        if pos.get("source") != "paper":
+            update_position(ticker, current_price=current_price)
 
         entry_price = pos.get("entry_price", current_price)
         entry_date = pos.get("entry_date", "")
@@ -359,11 +363,33 @@ def _generate_opus_narrative(review: "WeeklyReview") -> Optional[str]:
         "high_priority_alerts": review.alerts,
         "sector_momentum": review.sector_snapshot or [],
     }
+
+    # Weekly memory: feed the last few reviews as a compact, fact-based digest so
+    # the narrative has continuity (trajectories, regime shifts) and can check
+    # whether last week's cautions played out. Read-only; never break the review.
+    prior_ctx = None
+    try:
+        from core.weekly_memory import build_context_digest
+        prior_ctx = build_context_digest(review.review_date)
+    except Exception as e:
+        logger.debug(f"weekly_memory digest skipped: {e}")
+    if prior_ctx:
+        payload["prior_weeks_context"] = prior_ctx
+
+    continuity = (
+        "\n\nIf prior_weeks_context is present, use it for CONTINUITY: note where a "
+        "position's return is deteriorating or improving across weeks, flag any "
+        "sector-regime shift, and explicitly say whether last week's cautions "
+        "(last_week_take) actually played out. Treat last_week_take as a claim to "
+        "verify against this week's facts, not as ground truth."
+        if prior_ctx else ""
+    )
     user_msg = (
         "Generate the weekly portfolio review narrative for this data.\n\n"
         "<review_data>\n"
         f"{json.dumps(payload, indent=2)}\n"
         "</review_data>"
+        + continuity
     )
     return call_llm(
         system=_WEEKLY_REVIEW_SYSTEM,
