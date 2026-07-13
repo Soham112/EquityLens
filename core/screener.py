@@ -458,6 +458,7 @@ class SwingSignal:
     resistance_levels: Optional[list[float]] = None
     chart_thesis: Optional[str] = None
     chart_path: Optional[str] = None
+    analyzed_at: Optional[str] = None          # chart_refresh staleness gate — missing = treated stale (re-charts daily, paid)
 
 
 def _check_volume_accumulation(p: PriceData) -> tuple[bool, str]:
@@ -853,6 +854,7 @@ def _apply_chart_vision(candidates: list["SwingSignal"]) -> None:
                 sig.resistance_levels = chart.resistance_levels
                 sig.chart_thesis      = chart.chart_thesis
                 sig.chart_path        = chart.chart_path
+                sig.analyzed_at       = chart.analyzed_at   # without this, chart_refresh re-charts everything daily (paid)
                 logger.info(f"  {sig.ticker}: {chart.entry_type} | {chart.pattern} | R/R={chart.risk_reward:.1f}")
     except Exception as e:
         logger.warning(f"[ChartVision] batch failed: {e}")

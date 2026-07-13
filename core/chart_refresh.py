@@ -109,6 +109,10 @@ def refresh_stale_candidates(max_age_days: int = 3) -> list[dict]:
             new_entry_type = new_signal.entry_type
             new_rr = new_signal.risk_reward
 
+            # Every re-analysis is a paid vision call — stamp the timestamp on ALL
+            # outcomes (incl. MARKED_STALE), or the candidate re-charts every run.
+            candidate["analyzed_at"] = new_signal.analyzed_at
+
             # Mark as STALE if entry changed to 'wait' or R/R degraded
             if new_entry_type == "wait":
                 candidate["stale"] = True
