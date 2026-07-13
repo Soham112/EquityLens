@@ -114,6 +114,14 @@ def discovery_scan() -> dict:
         "universe_size": len(tickers),
         "template_passers": sum(1 for f in flags.values() if f["template_pass"]),
         "shortlist": shortlist,
+        # Full ranked list of every liquidity-passing template passer (names only,
+        # $0). Exists so the top-15 cutoff can be judged with a scored look-back
+        # ("what did ranks 16+ do?") instead of a hunch — see E15 weekly updates.
+        # Scan-date price is stored so forward returns are trivial to compute.
+        "full_ranking": [
+            {"ticker": r["ticker"], "rs_pct": r["rs_pct"], "price": r["price"]}
+            for r in rows
+        ],
         "note": "Names only — research candidates for dossiers, never auto-entries. "
                 "Approved names join growth_universe and face the same gates.",
     }

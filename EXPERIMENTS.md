@@ -418,6 +418,14 @@ that's what keeps this log honest.
   technical screen but aren't superperformers: **OGN** (Sun Pharma $4B buyout) and
   **AVNS** (AIP $1.27B take-private) are M&A premiums, **AMN** (+100% rev) is
   one-time strike/labor-disruption revenue management guides to normalize down.
+- **Shortlist-width look-back (pre-registered 2026-07-12):** the top-15 cutoff may be
+  too tight (173 passed the template). Rather than widen on a hunch, discovery now logs
+  the FULL ranked passer list (`full_ranking`: ticker/RS/price, $0, names only) each
+  Sunday. **Revisit after the 2026-07-19 and 2026-07-26 runs** with three questions:
+  (1) weekly churn into the top 15; (2) forward performance of ranks 16-60 vs the top
+  15 — did the cutoff miss a winner that RS ≥ 95 + a $300M-$10B cap filter would have
+  caught?; (3) how much of a session the unattended STEP 2.5 research actually consumed.
+  Widen only if (2) says yes and (3) says it's affordable.
 - **Status: OBSERVING** (track whether the 7 admits win vs the WATCH/PASS set).
 
 ## Settled experiments
