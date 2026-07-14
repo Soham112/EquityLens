@@ -516,8 +516,13 @@ async def growth_scan():
 async def growth_portfolio():
     import sys
     sys.path.insert(0, str(Path(__file__).parent.parent))
-    from core.growth_paper_trading import load_growth_portfolio
+    from core.growth_paper_trading import load_growth_portfolio, _fetch_price
     p = load_growth_portfolio()
+    # Refresh live prices for all positions
+    for ticker, pos in p.positions.items():
+        live = _fetch_price(ticker)
+        if live:
+            pos.current_price = live
     return {
         "starting_capital": p.starting_capital,
         "cash": round(p.cash, 2),
@@ -806,8 +811,34 @@ async def discovery():
     from core.discovery import load_latest_discovery
     from core.dossier import read_verdict
     result = load_latest_discovery()
+    shortlist = result.get("shortlist", [])
+
+    # `price` is the scan-date snapshot (kept as-is — used elsewhere to compute
+    # forward returns). Refresh a separate `current_price` at request time so the
+    # dashboard doesn't show a stale Sunday price all week.
+    if shortlist:
+        try:
+            import yfinance as yf
+            tickers = [row["ticker"] for row in shortlist]
+            raw = yf.download(tickers, period="2d", interval="1d", progress=False,
+                              auto_adjust=True, group_by="ticker", threads=True)
+            import pandas as pd
+            multi = isinstance(raw.columns, pd.MultiIndex)
+            for row in shortlist:
+                t = row["ticker"]
+                try:
+                    df = raw[t] if multi else raw
+                    live = float(df["Close"].dropna().iloc[-1])
+                    row["current_price"] = round(live, 2)
+                except Exception:
+                    row["current_price"] = row.get("price")
+        except Exception as e:
+            logger.warning(f"[Discovery] live price refresh failed: {e}")
+            for row in shortlist:
+                row["current_price"] = row.get("price")
+
     # Surface each name's dossier verdict (ADMIT/WATCH/PASS/PENDING) on the screen
-    for row in result.get("shortlist", []):
+    for row in shortlist:
         v = read_verdict(row.get("ticker", ""))
         row["verdict"] = v["status"]
         row["verdict_text"] = v["text"]

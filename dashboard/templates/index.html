@@ -1661,6 +1661,7 @@
           <th style="text-align:left;padding:6px 4px">Ticker</th>
           <th style="text-align:left;padding:6px 4px">Company</th>
           <th style="text-align:right;padding:6px 4px">Price</th>
+          <th style="text-align:right;padding:6px 4px">Since scan</th>
           <th style="text-align:right;padding:6px 4px">RS %ile</th>
           <th style="text-align:right;padding:6px 4px">vs 52w high</th>
           <th style="text-align:right;padding:6px 4px">Above 52w low</th>
@@ -1669,10 +1670,14 @@
           <th style="text-align:center;padding:6px 8px">Dossier</th>
         </tr></thead><tbody>`;
       rows.forEach(r => {
+        const live = r.current_price ?? r.price;
+        const sinceScan = r.price ? (live - r.price) / r.price : 0;
+        const sinceScanColor = sinceScan >= 0 ? '#16a34a' : '#dc2626';
         html += `<tr style="border-bottom:1px solid #f3f4f6">
           <td style="padding:8px 4px;font-weight:700;color:#9333ea">${r.ticker}</td>
           <td style="padding:8px 4px;color:#374151;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.name || '—'}</td>
-          <td style="padding:8px 4px;text-align:right">$${r.price.toFixed(2)}</td>
+          <td style="padding:8px 4px;text-align:right" title="Scan-date price: $${r.price.toFixed(2)}">$${live.toFixed(2)}</td>
+          <td style="padding:8px 4px;text-align:right;color:${sinceScanColor}">${sinceScan >= 0 ? '+' : ''}${(sinceScan*100).toFixed(1)}%</td>
           <td style="padding:8px 4px;text-align:right;font-weight:700">${r.rs_pct.toFixed(0)}</td>
           <td style="padding:8px 4px;text-align:right;color:#6b7280">${(r.pct_off_52w_high*100).toFixed(1)}%</td>
           <td style="padding:8px 4px;text-align:right;color:#16a34a">+${(r.pct_above_52w_low*100).toFixed(0)}%</td>
