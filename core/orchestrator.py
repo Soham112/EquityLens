@@ -289,6 +289,18 @@ def analyze(
     # signal_tracker scores the demoted stock's 30/90d afterlife per gate cohort
     demoted_by: list = []
 
+    # ── E16: Stage-4 hard veto — price confirms fundamentals ──
+    # Runs FIRST: no fundamental strength can override a Stage 4 downtrend
+    # (price < MA50 < MA200). Minervini: analyst upgrades and valuation metrics
+    # in Stage 4 are traps, not opportunities.
+    if effective_signal == "BUY" and getattr(price, "stage", None) == "4":
+        effective_signal = "WATCHLIST"
+        demoted_by.append("stage4_veto")
+        alerts.append(
+            "Stage-4 veto: BUY → WATCHLIST — price < MA50 < MA200 (downtrend). "
+            "Fundamentals cannot override a Stage 4 chart."
+        )
+
     # ── Upgrade 1: Apply valuation conviction cap ──
     if valuation_result and valuation_result.conviction_cap is not None:
         if conv_result.conviction > valuation_result.conviction_cap:

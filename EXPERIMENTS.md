@@ -17,6 +17,27 @@ that's what keeps this log honest.
 
 ## Active experiments
 
+### E18 — Stage-4 hard veto on long-term BUYs (Minervini stage analysis) (SHIPPED)
+- **Hypothesis:** "Price confirms fundamentals" — no fundamental case justifies a long
+  entry while a stock trades in a Stage 4 downtrend (price < MA50 < MA200). The swing
+  track already enforces technical-first (prefilter → template → chart gate); the LT
+  hunter weights fundamentals 50%, so a fundamentally loved name in a downtrend could
+  still reach BUY. Minervini: analyst upgrades and "cheap valuation" in Stage 4 are
+  traps, not opportunities.
+- **Change (live 2026-07-13):** orchestrator demotes BUY → WATCHLIST when
+  `PriceData.stage == "4"` (Weinstein stage from `data_layer._calc_stage`), tagged
+  `demoted_by: stage4_veto`. Runs FIRST, before the valuation/sector/correlation/
+  earnings gates — technical screening first, fundamental overlays second. WATCHLIST
+  is the hard block in practice: only BUY auto-enters.
+- **How to judge (pre-registered):** E8 shadow tracking scores every demotion's 30/90d
+  afterlife automatically. WORKED if the `stage4_veto` shadow cohort's 90d avg return
+  is below the entered-BUY cohort (the veto kept us out of losers). FAILED if the
+  cohort *beats* entered BUYs (we'd be vetoing turnarounds the pipeline was right
+  about). Expect a LOW fire rate — conviction ≥8 with a Stage 4 chart should be rare;
+  if it never fires in a month, that's fine (cheap insurance), don't widen it to
+  Stage 3/1 without a separate experiment.
+- **Status: OBSERVING (live since 2026-07-13).**
+
 ### E16 — P/E-expansion topping exit (Minervini ch. 3) (SHIPPED)
 - **Hypothesis:** A superperformance run tops when price outruns earnings — the P/E
   balloons to 2.5-3x its breakout level *while* quarterly growth decelerates. Detecting
