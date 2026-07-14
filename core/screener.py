@@ -1092,3 +1092,80 @@ def load_trend_template(ticker: str) -> Optional[dict]:
             return _json.load(f).get(ticker.upper())
     except Exception:
         return None
+
+
+# ── E21: Base counter (Minervini stage analysis) ──────────────────────────────
+# A Stage-2 advance moves in a staircase: consolidation ("base", 5-26 weeks) →
+# breakout → next base. Bases 1-2 (early, often off a market correction) are the
+# lowest-risk entries; base 3 is more obvious but tradable; bases 4-5 mark a
+# late-stage, crowded trade where abrupt base failures become frequent.
+
+BASE_MIN_DEPTH = 0.05      # pullback from the running high must reach 5% to open a base
+BASE_MIN_DAYS = 25         # peak → breakout must span >= 25 sessions (~5 weeks) to count
+BASE_RESET_DEPTH = 0.40    # a 40% drawdown breaks the advance — base count resets
+
+def count_bases(ticker: str, closes=None) -> Optional[dict]:
+    """
+    Count completed bases in the current Stage-2 advance from daily closes.
+
+    Advance start = the session after the last close below the MA200 (same
+    definition as the E19 distribution-break check); whole window if the stock
+    never traded below its MA200. Walks the advance with a running high:
+    a >=5% pullback opens a base; a close above the base's peak >=25 sessions
+    after that peak completes it (base_count += 1); a 40% drawdown resets the
+    count (the advance is broken, whatever comes next is a new structure).
+
+    Returns {base_count, in_base, current_base_days, advance_days} or None.
+    `base_count` at breakout time reads as "buying out of base N".
+    """
+    try:
+        if closes is None:
+            import yfinance as yf
+            hist = yf.Ticker(ticker).history(period="2y")
+            closes = hist["Close"].dropna()
+        if closes is None or len(closes) < 60:
+            return None
+
+        start_idx = 0
+        if len(closes) >= 200:
+            ma200 = closes.rolling(200).mean()
+            below = closes[closes < ma200]
+            if len(below):
+                pos_after = closes.index.get_loc(below.index[-1]) + 1
+                if pos_after >= len(closes) - 5:
+                    return {"base_count": 0, "in_base": False,
+                            "current_base_days": 0, "advance_days": 0}
+                start_idx = pos_after
+
+        seg = closes.iloc[start_idx:].to_numpy(dtype=float)
+        base_count = 0
+        high = seg[0]
+        high_i = 0
+        in_base = False
+        for i in range(1, len(seg)):
+            px = seg[i]
+            if px > high:
+                if in_base and (i - high_i) >= BASE_MIN_DAYS:
+                    base_count += 1
+                in_base = False
+                high = px
+                high_i = i
+                continue
+            dd = px / high - 1
+            if dd <= -BASE_RESET_DEPTH:
+                base_count = 0
+                in_base = False
+                high = px
+                high_i = i
+            elif dd <= -BASE_MIN_DEPTH:
+                in_base = True
+
+        return {
+            "base_count": base_count,
+            "in_base": in_base,
+            "current_base_days": (len(seg) - 1 - high_i) if in_base else 0,
+            "advance_days": len(seg),
+        }
+    except Exception as e:
+        logger.debug(f"count_bases {ticker}: {e}")
+        return None

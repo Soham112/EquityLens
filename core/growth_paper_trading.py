@@ -365,6 +365,29 @@ def auto_enter_swing_signals(swing_signals: list) -> list[str]:
         except Exception as e:
             logger.warning(f"Mistake-pattern check failed for {s.ticker}: {e}")
 
+        # E21: base counting — a 4th/5th base in the same Stage-2 advance is a
+        # late-stage, crowded trade where abrupt base failures get frequent.
+        # Downsized 25%, never hard-blocked (gates stay the yes/no authority);
+        # the base:late tag rides into the feedback record for cohort scoring.
+        base_tags: list[str] = []
+        try:
+            from core.screener import count_bases
+            bc = count_bases(s.ticker)
+            if bc:
+                # buying out of base N (breakout) or inside base N (pullback/bounce)
+                base_num = bc["base_count"] + (1 if bc["in_base"] else 0)
+                if base_num >= 4:
+                    base_tags.append("base:late")
+                    size = round(size * 0.75, 2)
+                    actions.append(
+                        f"{s.ticker}: base #{base_num} of this advance — late-stage, "
+                        f"size reduced 25% to ${size:.0f}"
+                    )
+                elif base_num > 0:
+                    base_tags.append(f"base:{base_num}")
+        except Exception as e:
+            logger.debug(f"Base count failed for {s.ticker}: {e}")
+
         # Probation sizing: entries that fail any strict gate ride at half size —
         # more data points per dollar of risk while the cohort evidence accumulates
         if strict_tags:
@@ -405,6 +428,7 @@ def auto_enter_swing_signals(swing_signals: list) -> list[str]:
                     # strict:* tags ride with the fired screens — gate_cohort_report
                     # groups closed trades by them to judge each loosened gate
                     screens_matched=list(getattr(s, "signals_fired", []) or []) + strict_tags
+                                    + base_tags
                                     + (["source:discovery"] if s.ticker in discovery_admitted else []),
                     signal_type="SWING",
                     entry_price=fill,

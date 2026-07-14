@@ -38,6 +38,30 @@ that's what keeps this log honest.
   Stage 3/1 without a separate experiment.
 - **Status: OBSERVING (live since 2026-07-13).**
 
+### E21 — Base counter: late-stage bases downsized (Minervini stage analysis) (SHIPPED)
+- **Hypothesis:** A Stage-2 advance moves in countable bases (5-26 week consolidations
+  → breakout). Bases 1-2 are the lowest-risk entries; bases 4-5 are late-stage,
+  crowded trades where abrupt base failures become frequent. Entries on a 4th+ base
+  should therefore underperform earlier-base entries.
+- **Change (live 2026-07-13):** `screener.count_bases()` — advance start = last MA200
+  reclaim (2y daily window); a ≥5% pullback from the running high opens a base; a
+  close above the peak ≥25 sessions later completes it; a 40% drawdown resets the
+  count. In `auto_enter_swing_signals`: entries at base #4+ get **size × 0.75** and a
+  `base:late` tag; earlier entries get `base:N` — both ride into the feedback record
+  (same cohort pattern as strict:*). Never a hard block; runs at entry time only
+  (few names/day → per-ticker fetch is cheap).
+- **Verified:** synthetic staircases with 1/2/4 engineered bases count exactly;
+  a straight advance counts 0; real reads plausible (MGM = base 2, NVDA = base 1
+  of the post-reclaim advance).
+- **How to judge (pre-registered):** once ≥10 closed trades carry base tags, compare
+  the base:late cohort's hit rate / avg return vs base:1-2 entries (screen_report
+  gives this for free). WORKED if late-base entries underperform — consider raising
+  the downsize or making it a gate. FAILED if no difference or late bases WIN —
+  remove the downsize (the tag can stay as free telemetry). Also sanity-check the
+  fire rate: most swing candidates should read base 1-3; if everything reads 0 or
+  in_base, the 5%/25-session thresholds need recalibrating, not the hypothesis.
+- **Status: OBSERVING (live since 2026-07-13).**
+
 ### E20 — RS definition: 3-month return vs weighted 12-month (BACKTESTED → FAILED, not shipped)
 - **Hypothesis:** The Trend Template's RS percentile (criterion 8) currently ranks on
   3-month return only. Minervini/IBD use a ~12-month weighted RS (40% most recent
