@@ -417,6 +417,7 @@ def daily_update() -> dict:
                 alerts.append(f"{ticker}: {ratio:g}:1 split detected — shares/entry/stops adjusted")
 
         # Update current price and peak price (peak only moves up, never down)
+        prev_close = pos.current_price   # yesterday's stored close, for the E19 down-day guard
         pos.current_price = price
         if pos.peak_price is None or price > pos.peak_price:
             pos.peak_price = round(price, 4)
@@ -462,6 +463,18 @@ def daily_update() -> dict:
         # Tier 1 alert (just log, don't sell)
         if pos.stop_tier1 and price <= pos.stop_tier1:
             alerts.append(f"STOP ALERT {ticker}: price ${price:.2f} hit Tier 1 ${pos.stop_tier1:.2f}")
+
+        # E19: Stage-3 distribution break — largest one-day decline of the advance
+        # on overwhelming volume. Alert only (LT exits stay stop/trim-driven).
+        # Only check on a meaningful down day to avoid the extra fetch on quiet days.
+        if prev_close and price < prev_close * 0.96:
+            try:
+                from core.momentum_monitor import check_distribution_break
+                dist, dist_detail = check_distribution_break(ticker)
+                if dist:
+                    alerts.append(f"DISTRIBUTION BREAK {ticker}: {dist_detail}")
+            except Exception as e:
+                logger.debug(f"distribution_break LT check {ticker}: {e}")
 
         # Profit-taking — each level fires exactly once per position
         trim = check_trimming_levels(pos.entry_price, price, pos.recommended_pct,

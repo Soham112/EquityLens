@@ -38,6 +38,31 @@ that's what keeps this log honest.
   Stage 3/1 without a separate experiment.
 - **Status: OBSERVING (live since 2026-07-13).**
 
+### E19 — Stage-3 distribution-break exit signal (Minervini stage analysis) (SHIPPED)
+- **Hypothesis:** A Stage-2 advance tops with a "massive one-day price break on
+  overwhelming volume" — the largest single-day decline since the advance began marks
+  institutional distribution and leads further weakness. Institutions sell ahead of
+  the fundamentals, so this should fire while earnings still look fine (the case our
+  P/E-expansion signal E16 and thesis-break checks can miss).
+- **Change (live 2026-07-13):** `momentum_monitor.check_distribution_break()` fires when
+  ALL of: (1) today's decline ≤ −4%; (2) it is the largest one-day decline since the
+  Stage-2 advance start (last MA200 reclaim in a 400d window, else whole window);
+  (3) volume ≥ 1.5× 90d avg. New `DISTRIBUTION_BREAK` ExitAlert (NEXT_SESSION) for
+  swing + growth positions; LT paper positions get the same check as an alert on any
+  −4% day (guarded by prev-close to skip the fetch on quiet days). **Flag-only** —
+  deliberately NOT in `execute_exit_alerts`' AUTO_EXIT_REASONS while OBSERVING.
+- **Verified:** synthetic advance + −6% break on 2.5× volume fires; same break on low
+  volume does not; −6% break when an earlier −10% day exists in the advance does not.
+  All six current holdings quiet on 2026-07-13.
+- **How to judge (pre-registered):** for every fire, measure forward 10/20-trading-day
+  return from the alert. WORKED if flagged names underperform concurrent un-flagged
+  holds (the alert leads weakness) — then promote to AUTO_EXIT_REASONS. FAILED if
+  flagged names recover and keep climbing (we'd be shaken out by one-day panics —
+  in that case try requiring a close below the 50-day MA as a co-condition before
+  killing the idea). Also watch fire rate: −4% + record-break + 1.5× volume should
+  be rare; multiple fires per week on a ~20-position book means the guards are too loose.
+- **Status: OBSERVING (live since 2026-07-13).**
+
 ### E16 — P/E-expansion topping exit (Minervini ch. 3) (SHIPPED)
 - **Hypothesis:** A superperformance run tops when price outruns earnings — the P/E
   balloons to 2.5-3x its breakout level *while* quarterly growth decelerates. Detecting

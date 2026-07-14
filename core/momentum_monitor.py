@@ -7,6 +7,9 @@ Checks these exit conditions on each open swing position:
   3. Thesis break        — the entry reason is structurally gone
   4. P/E-expansion top   — E16: P/E ran to 2.5x+ its breakout level WHILE earnings
                            growth decelerated (price outran earnings — Minervini topping)
+  5. Distribution break  — E19: largest single-day decline since the Stage-2 advance
+                           began, on overwhelming volume (Minervini's primary Stage-3
+                           topping signal — institutions distributing)
 
 Returns a list of ExitAlert objects for the dashboard and daily scan to act on.
 Chart vision is NOT used for exits — it's reserved for entry timing only.
@@ -24,12 +27,15 @@ MOMENTUM_STALL_DAYS = 3       # consecutive days of low volume + flat price
 VOLUME_STALL_THRESHOLD = 0.80 # volume drops below 80% of 90d avg = stalling
 PRICE_FLAT_THRESHOLD = 0.015  # price moving less than 1.5% in either direction per day = flat
 PE_EXPANSION_MULT = 2.5       # E16: current P/E >= 2.5x breakout P/E = topping alert zone (Minervini)
+DIST_BREAK_MIN_DECLINE = -0.04   # E19: day must be at least -4% to count as a "massive" break
+DIST_BREAK_VOL_MULT = 1.5        # E19: volume >= 1.5x 90d avg = "overwhelming"
+DIST_BREAK_MIN_HISTORY = 5       # E19: need >=5 sessions since advance start before judging "largest"
 
 
 @dataclass
 class ExitAlert:
     ticker: str
-    reason: str           # "MOMENTUM_STALL" | "THESIS_BREAK" | "STOP_LOSS" | "PE_EXPANSION_TOP" | "EARNINGS_PROXIMITY"
+    reason: str           # "MOMENTUM_STALL" | "THESIS_BREAK" | "STOP_LOSS" | "PE_EXPANSION_TOP" | "DISTRIBUTION_BREAK" | "EARNINGS_PROXIMITY"
     urgency: str          # "IMMEDIATE" | "NEXT_SESSION"
     current_price: float
     entry_price: float
@@ -148,6 +154,64 @@ def check_pe_expansion(ticker: str, breakout_pe: Optional[float]) -> tuple[bool,
             )
     except Exception as e:
         logger.debug(f"pe_expansion check {ticker}: {e}")
+    return False, ""
+
+
+def check_distribution_break(ticker: str) -> tuple[bool, str]:
+    """
+    E19 — Stage-3 distribution break (Minervini's primary topping signal).
+
+    Fires when TODAY is the largest single-day decline since the current
+    Stage-2 advance began, AND the decline is material (<= -4%), AND volume
+    is overwhelming (>= 1.5x 90d avg). Institutions distribute ahead of the
+    fundamentals — do not wait for a bad earnings report.
+
+    Advance start = the session after the last close below the MA200 (the
+    final MA200 reclaim). If the stock never traded below its MA200 in the
+    window, the whole window counts as the advance.
+    """
+    try:
+        hist = yf.Ticker(ticker).history(period="400d")
+        close = hist["Close"].dropna()
+        if len(close) < 60:
+            return False, ""
+
+        # Locate the start of the Stage-2 advance
+        start_idx = 0
+        if len(close) >= 200:
+            ma200 = close.rolling(200).mean()
+            below = close < ma200
+            below = below[below]
+            if len(below):
+                last_below = below.index[-1]
+                pos_after = close.index.get_loc(last_below) + 1
+                if pos_after >= len(close) - DIST_BREAK_MIN_HISTORY:
+                    return False, ""   # advance just started (or stock is under MA200)
+                start_idx = pos_after
+
+        seg = close.iloc[start_idx:]
+        rets = seg.pct_change().dropna()
+        if len(rets) < DIST_BREAK_MIN_HISTORY:
+            return False, ""
+
+        r_today = float(rets.iloc[-1])
+        if r_today > DIST_BREAK_MIN_DECLINE or r_today > float(rets.min()):
+            return False, ""
+
+        vol = hist["Volume"].dropna()
+        vol_90d = float(vol.tail(90).mean())
+        vol_today = float(vol.iloc[-1])
+        if vol_90d <= 0 or vol_today < DIST_BREAK_VOL_MULT * vol_90d:
+            return False, ""
+
+        advance_days = len(rets)
+        return True, (
+            f"Largest one-day decline of the advance: {r_today:.1%} "
+            f"(worst in {advance_days} sessions) on {vol_today / vol_90d:.1f}x avg volume "
+            f"— institutional distribution, classic Stage-3 signal"
+        )
+    except Exception as e:
+        logger.debug(f"distribution_break check {ticker}: {e}")
     return False, ""
 
 
@@ -274,7 +338,23 @@ def monitor_open_swings() -> list[ExitAlert]:
             ))
             continue
 
-        # 5. Earnings proximity — swing positions shouldn't sleepwalk into a print.
+        # 5. Distribution break (E19) — largest one-day decline of the advance on
+        # overwhelming volume. Flag-only (not in AUTO_EXIT_REASONS) while OBSERVING.
+        dist, dist_detail = check_distribution_break(ticker)
+        if dist:
+            alerts.append(ExitAlert(
+                ticker=ticker,
+                reason="DISTRIBUTION_BREAK",
+                urgency="NEXT_SESSION",
+                current_price=current_price,
+                entry_price=entry_price,
+                return_pct=return_pct,
+                detail=dist_detail,
+                action=f"Stage-3 distribution — primary sell signal. Return so far: {return_pct:+.1%}",
+            ))
+            continue
+
+        # 6. Earnings proximity — swing positions shouldn't sleepwalk into a print.
         # Not an auto-exit: a decision prompt (exit, trim, or consciously hold).
         try:
             from core.earnings_calendar import get_next_earnings
