@@ -426,3 +426,122 @@ def trend_template_backtest() -> dict:
     with open("data/trend_template_backtest.json", "w") as f:
         json.dump(report, f, indent=1)
     return report
+
+
+# ── E20: RS-definition race — 3-month RS (current) vs weighted 12-month RS ─────
+# Same snapshot/cohort methodology as E14; the ONLY difference between the two
+# cohorts is the RS percentile fed into criterion 8 of the Trend Template.
+# Weighted 12m RS = IBD/Minervini style: 40% most recent quarter, 20% each of
+# the three older quarters (0.4·ret63 + 0.2·ret126 + 0.2·ret189 + 0.2·ret252).
+# Pre-registered (see EXPERIMENTS.md E20): weighted cohort must beat the 3m
+# cohort on BOTH fwd21 and fwd63 avg in a majority of years INCLUDING at least
+# one down year (2018 or 2022) to replace ret3m in compute_trend_template.
+
+def rs_variant_backtest() -> dict:
+    import numpy as np
+    import pandas as pd
+    import yfinance as yf
+    from core.universe import load_universe
+
+    uni = load_universe()
+    tickers = sorted({t for t, _ in uni})
+    logger.info(f"[E20] downloading {len(tickers)} tickers from 2015-01-01...")
+    raw = yf.download(tickers + ["SPY"], start="2015-01-01", progress=False,
+                      auto_adjust=True, group_by="ticker", threads=True)
+    spy = raw["SPY"]["Close"].dropna()
+    idx = spy.index
+    week_last = spy.groupby([idx.isocalendar().year, idx.isocalendar().week]).tail(1).index
+    snap_dates = [d for d in week_last
+                  if d >= pd.Timestamp("2016-01-01") and d <= idx[-1] - pd.Timedelta(days=35)]
+
+    frames = {}
+    for t in tickers:
+        try:
+            df = raw[t].dropna(subset=["Close"])
+            if len(df) < 320:
+                continue
+            c = df["Close"]
+            f = pd.DataFrame(index=df.index)
+            f["close"] = c
+            f["ma50"] = c.rolling(50).mean()
+            f["ma150"] = c.rolling(150).mean()
+            f["ma200"] = c.rolling(200).mean()
+            f["ma200_1m_ago"] = f["ma200"].shift(21)
+            f["lo52"] = c.rolling(252).min()
+            f["hi52"] = c.rolling(252).max()
+            f["ret3m"] = c.pct_change(63)
+            f["rs_w12m"] = (0.4 * c.pct_change(63) + 0.2 * c.pct_change(126)
+                            + 0.2 * c.pct_change(189) + 0.2 * c.pct_change(252))
+            frames[t] = f
+        except Exception:
+            continue
+
+    cohorts = {"template_rs3m": [], "template_rs_w12m": []}
+    by_year = {}
+    for d in snap_dates:
+        rows = {}
+        for t, f in frames.items():
+            if d not in f.index:
+                continue
+            i = f.index.get_loc(d)
+            r = f.iloc[i]
+            if any(pd.isna(r[k]) for k in ("ma50", "ma150", "ma200", "ma200_1m_ago",
+                                           "lo52", "hi52", "ret3m", "rs_w12m")):
+                continue
+            if i + 63 >= len(f):
+                continue
+            fwd21 = float(f["close"].iloc[i + 21] / r["close"] - 1)
+            fwd63 = float(f["close"].iloc[i + 63] / r["close"] - 1)
+            rows[t] = (r, fwd21, fwd63)
+        if len(rows) < 50:
+            continue
+        rets3m = sorted(v[0]["ret3m"] for v in rows.values())
+        retsw = sorted(v[0]["rs_w12m"] for v in rows.values())
+        n = len(rows)
+        year = str(d.year)
+        for t, (r, fwd21, fwd63) in rows.items():
+            price = r["close"]
+            base = (price > r["ma50"] > r["ma150"] > r["ma200"]
+                    and r["ma200"] > r["ma200_1m_ago"]
+                    and price >= 1.30 * r["lo52"]
+                    and price >= 0.75 * r["hi52"])
+            if not base:
+                continue
+            rec = (fwd21, year, fwd63)
+            if np.searchsorted(rets3m, r["ret3m"]) / n * 100 >= 70:
+                cohorts["template_rs3m"].append(rec)
+            if np.searchsorted(retsw, r["rs_w12m"]) / n * 100 >= 70:
+                cohorts["template_rs_w12m"].append(rec)
+        by_year[year] = True
+
+    def stats(rows):
+        if not rows:
+            return {"n": 0}
+        v = [x[0] for x in rows]
+        v63 = [x[2] for x in rows]
+        return {"n": len(v), "avg": round(float(np.mean(v)), 4),
+                "median": round(float(np.median(v)), 4),
+                "win_rate": round(float(np.mean([x > 0 for x in v])), 3),
+                "avg_63d": round(float(np.mean(v63)), 4),
+                "win_rate_63d": round(float(np.mean([x > 0 for x in v63])), 3)}
+
+    years = sorted(by_year)
+    per_year = {y: {k: stats([x for x in v if x[1] == y]) for k, v in cohorts.items()}
+                for y in years}
+    # Verdict per pre-registration: weighted must beat 3m on BOTH horizons' avg,
+    # majority of years, including >=1 down year (2018 or 2022)
+    wins = [y for y in years
+            if per_year[y]["template_rs_w12m"].get("n", 0) > 0
+            and per_year[y]["template_rs3m"].get("n", 0) > 0
+            and per_year[y]["template_rs_w12m"]["avg"] > per_year[y]["template_rs3m"]["avg"]
+            and per_year[y]["template_rs_w12m"]["avg_63d"] > per_year[y]["template_rs3m"]["avg_63d"]]
+    report = {"window": f"{snap_dates[0].date()} → {snap_dates[-1].date()}",
+              "overall": {k: stats(v) for k, v in cohorts.items()},
+              "per_year": per_year,
+              "w12m_wins_both_horizons": wins,
+              "majority": len(wins) > len(years) / 2,
+              "includes_down_year": any(y in wins for y in ("2018", "2022"))}
+    os.makedirs("data", exist_ok=True)
+    with open("data/rs_variant_backtest.json", "w") as f:
+        json.dump(report, f, indent=1)
+    return report

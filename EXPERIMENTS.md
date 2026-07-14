@@ -38,6 +38,32 @@ that's what keeps this log honest.
   Stage 3/1 without a separate experiment.
 - **Status: OBSERVING (live since 2026-07-13).**
 
+### E20 — RS definition: 3-month return vs weighted 12-month (BACKTESTED → FAILED, not shipped)
+- **Hypothesis:** The Trend Template's RS percentile (criterion 8) currently ranks on
+  3-month return only. Minervini/IBD use a ~12-month weighted RS (40% most recent
+  quarter, 20% each older quarter), which should better distinguish durable leaders
+  from 3-month wonder spikes.
+- **Pre-registered test (written 2026-07-13, BEFORE running):**
+  `strategy_backtest.rs_variant_backtest()` — identical E14 methodology (weekly
+  snapshots 2016-2026, same base template), only criterion 8 differs:
+  cohort A = RS pct ≥70 on ret3m (current), cohort B = RS pct ≥70 on
+  0.4·ret63 + 0.2·ret126 + 0.2·ret189 + 0.2·ret252. **Weighted wins only if its
+  cohort beats the 3m cohort on BOTH fwd21 AND fwd63 avg return in a majority of
+  years INCLUDING at least one down year (2018 or 2022)** — the same bar E14 set.
+  If it wins: swap `ret3m` for the weighted formula in `compute_trend_template`
+  (affects the price_structure signal + discovery shortlist ranking). If it loses
+  or ties: keep ret3m, close as FAILED, do not re-litigate without a new formulation.
+- **Result (2026-07-13, data/rs_variant_backtest.json):** weighted 12m RS **lost** —
+  won both horizons in only **1 of 11 years (2024)**, no down year. Overall (n≈37k vs
+  45k stock-weeks): fwd21 avg +1.30% vs +1.43%, fwd63 +4.14% vs +4.35%, win rates
+  lower on both horizons. The weighted formula also passes ~22% MORE stock-weeks —
+  less selective AND lower forward returns. Recent 3-month momentum is the sharper
+  cross-sectional edge on this universe; the 12-month tail dilutes it.
+- **Verdict: FAILED.** `ret3m` stays in `compute_trend_template` for both consumers
+  (price_structure signal + discovery shortlist). Per pre-registration, not to be
+  re-litigated without a genuinely new formulation (e.g. 6m with 1m skip — a
+  different hypothesis needing its own pre-registration).
+
 ### E19 — Stage-3 distribution-break exit signal (Minervini stage analysis) (SHIPPED)
 - **Hypothesis:** A Stage-2 advance tops with a "massive one-day price break on
   overwhelming volume" — the largest single-day decline since the advance began marks
