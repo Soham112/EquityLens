@@ -523,6 +523,9 @@ def _swing_to_dict(s) -> dict:
         "resistance_levels":   getattr(s, "resistance_levels", None),
         "chart_thesis":        getattr(s, "chart_thesis", None),
         "chart_path":          getattr(s, "chart_path", None),
+        # Staleness gate for chart_refresh. Omitting it makes every charted
+        # candidate look stale on the same run → the whole list re-charts (paid).
+        "analyzed_at":         getattr(s, "analyzed_at", None),
     }
 
 
