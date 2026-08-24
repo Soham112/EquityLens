@@ -597,6 +597,61 @@ def _save_report(data: dict, name: str) -> None:
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+
+    import argparse
+    parser = argparse.ArgumentParser(description="EquityLens daily scan")
+    parser.add_argument(
+        "--as-of", metavar="HH:MM", default=None,
+        help="Run as if it were this ET time today — every price path (signals, "
+             "fills, stop checks) is truncated to that instant. Use for catch-up "
+             "runs of a missed 9:35 schedule so the scan reflects the morning "
+             "rather than the moment it happens to be run.")
+    args = parser.parse_args()
+
+    if args.as_of:
+        from core import as_of
+        as_of.install(args.as_of)
+        # Warm the 1m cache in batches. The deep scan fetches per ticker, so
+        # without this the shim issues one extra request per name and Yahoo
+        # starts returning 401 "Invalid Crumb" — which makes fetch_price_data
+        # return None and the scan silently SKIP those tickers.
+        warm: list[str] = []
+        try:
+            from workflows.weekly_scan import load_weekly_universe
+            warm += list((load_weekly_universe() or {}).get("all_stocks", []))
+        except Exception:
+            pass
+        try:
+            from core.growth_universe import get_growth_universe
+            warm += [t for t, _ in get_growth_universe()]
+        except Exception:
+            pass
+        try:
+            from core.paper_trading import load_paper_portfolio
+            warm += list(load_paper_portfolio().positions.keys())
+        except Exception:
+            pass
+        try:
+            from core.growth_paper_trading import load_growth_portfolio
+            warm += list(load_growth_portfolio().positions.keys())
+        except Exception:
+            pass
+        try:
+            from core.sector_map import MACRO_SECTORS
+            warm += [v["etf"] for v in MACRO_SECTORS.values() if v.get("etf")]
+        except Exception:
+            pass
+        warm += ["SPY", "^VIX", "^TNX", "DX-Y.NYB", "HYG", "LQD"]
+        as_of.prefetch(warm)
+
     results = run_daily_scan()
+
+    if args.as_of:
+        from core import as_of
+        rep = as_of.report()
+        print(f"\n[as-of {rep['cutoff_et']} ET] prices pinned for {rep['n_covered']} "
+              f"tickers; {rep['n_uncovered']} had no intraday data and kept their "
+              f"live bar{': ' + ', '.join(rep['uncovered'][:15]) if rep['uncovered'] else ''}")
+
     for r in results[:10]:
         print(f"{r.signal:9} | {r.ticker:5} | C={r.conviction:.1f} | {r.thesis[:80]}")
