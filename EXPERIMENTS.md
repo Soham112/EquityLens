@@ -36,7 +36,13 @@ that's what keeps this log honest.
   about). Expect a LOW fire rate — conviction ≥8 with a Stage 4 chart should be rare;
   if it never fires in a month, that's fine (cheap insurance), don't widen it to
   Stage 3/1 without a separate experiment.
-- **Status: OBSERVING (live since 2026-07-13).**
+- **2026-08-23:** **zero fires** across the live window (2026-07-14 → 2026-08-06, when
+  the pipeline stopped). `demoted_by` tallies over all recorded signals: valuation_cap 22,
+  earnings_gate 2, **stage4_veto 0**. This matches the pre-registered expectation ("expect
+  a LOW fire rate"), so it is neither evidence against the gate nor yet evidence for it —
+  there is no shadow cohort to score. Keep OBSERVING; per pre-registration do NOT widen
+  to Stage 3/1 on the strength of a quiet month.
+- **Status: OBSERVING (live since 2026-07-14).**
 
 ### E21 — Base counter: late-stage bases downsized (Minervini stage analysis) (SHIPPED)
 - **Hypothesis:** A Stage-2 advance moves in countable bases (5-26 week consolidations
@@ -60,7 +66,14 @@ that's what keeps this log honest.
   remove the downsize (the tag can stay as free telemetry). Also sanity-check the
   fire rate: most swing candidates should read base 1-3; if everything reads 0 or
   in_base, the 5%/25-session thresholds need recalibrating, not the hypothesis.
-- **Status: OBSERVING (live since 2026-07-13).**
+- **2026-08-23:** **no tagged entries yet** — `base:*` tags appear nowhere in
+  screen_performance.json, because the counter only runs inside `auto_enter_swing_signals`
+  and the pipeline made no swing entries between 2026-07-14 and its 2026-08-06 stop.
+  So the calibration sanity-check is still unanswered: we have spot reads only (MGM base 2,
+  NVDA base 1, SEZL in_base). **Next week's job:** once daily scans resume, confirm that
+  charted candidates spread across base 1-3 rather than clustering at 0 — that is the
+  cheap check that the 5%/25-session thresholds are sane, and it needs no closed trades.
+- **Status: OBSERVING (live since 2026-07-14, no tagged entries yet).**
 
 ### E20 — RS definition: 3-month return vs weighted 12-month (BACKTESTED → FAILED, not shipped)
 - **Hypothesis:** The Trend Template's RS percentile (criterion 8) currently ranks on
@@ -111,7 +124,14 @@ that's what keeps this log honest.
   in that case try requiring a close below the 50-day MA as a co-condition before
   killing the idea). Also watch fire rate: −4% + record-break + 1.5× volume should
   be rare; multiple fires per week on a ~20-position book means the guards are too loose.
-- **Status: OBSERVING (live since 2026-07-13).**
+- **2026-08-23:** **zero fires** in the live window (2026-07-14 → 2026-08-06, when the
+  pipeline stopped). Expected — the guard stack (≤−4% AND largest decline of the advance
+  AND ≥1.5× volume) was built to be rare, and the book held only 8-10 positions in a
+  mostly rising tape. The pre-registered "too loose" tripwire (multiple fires per week on
+  a ~20-position book) is nowhere near tripping; no loosening warranted. Remains
+  **flag-only** — promotion to AUTO_EXIT_REASONS requires fires that demonstrably lead
+  weakness, and there are none yet to judge.
+- **Status: OBSERVING (live since 2026-07-14).**
 
 ### E16 — P/E-expansion topping exit (Minervini ch. 3) (SHIPPED)
 - **Hypothesis:** A superperformance run tops when price outruns earnings — the P/E
@@ -209,6 +229,16 @@ that's what keeps this log honest.
     First probation entry after fix: **MGM 3/7 bounce R/R 3.9, $121 (0.5x),
     tag strict:signals, stop $45.54**. Cost note: 3+/7 charting ≈ +25-30 vision
     calls/day vs 4+/7. Cohorts: signals=1 open, risk_reward=0, entry_zone=0.
+  - 2026-08-23 — gate state still **all loose**, `history` empty (no gate has hit the
+    10-closed-trade threshold, so the ratchet has not fired). Cohorts:
+    `clean` **6 closed, 0 wins, avg −14.2%**; `signals` 1 closed, 0 wins, avg +1.5%;
+    `risk_reward` 0; `entry_zone` 0. Read carefully: the loosened-gate cohort is NOT
+    the problem — the *clean* (strict-passing) cohort is the one losing money, 0/6 with
+    a −14.2% average. That is the opposite of the failure mode the ratchet was built to
+    catch, and it means self-tightening would not have saved these trades. Too few
+    trades to act on (the pre-registered bar is 10+ per cohort), but flag for next week:
+    if `clean` stays 0-for-N, the problem is the *entry model itself* (or the tape),
+    not gate looseness, and E7's ratchet is aiming at the wrong target.
   - _Weekly updates go here (date | cohort sizes | hit rates | any self-tightening)_
 
 ### E6 — Mistake patterns feed conviction scoring
@@ -326,6 +356,14 @@ that's what keeps this log honest.
   Formula-race note: ranking-log entries before this date have 10 sectors,
   later ones 11 — score_ranking_log handles both; top-5-of-11 vs top-5-of-10
   is a mild comparability shift, noted here so nobody mistakes it for drift.
+- **2026-08-23 formula race (4 weeks logged, 2 scored — still far too few):**
+  avg fwd4w by formula — `70/30/0` **+2.43%**, `60/20/20` **+2.43%**,
+  `return only` +2.20%, **live 50/30/20 +1.57%**, `equal thirds` +1.55%,
+  `accel only` +1.43%, `40/40/20` +1.22%. The live formula sits 5th of 7, and the
+  two leaders both de-weight or drop volume_breadth. Directionally this echoes the
+  backtest's finding, but n=2 scored weeks is noise — the pre-registered trigger is
+  ~12+ scored weeks, so **no weight change**. Note the scoring is falling behind the
+  logging (4 logged vs 2 scored) because the pipeline stopped running 2026-08-06.
 - **Status: OBSERVING (Phase 2 live race running — now refereeing live 50/30/20
   vs accel-only as the surviving challenger; top-5 cutoff settled).**
 
@@ -450,6 +488,16 @@ that's what keeps this log honest.
   inverted. NOT actionable at this sample size; logged so nobody can say later we
   didn't see it early. Alarm threshold (pre-registered): inversion persisting at
   n≥50 with fwd10+ windows.
+- **2026-08-23 grading (n=130, windows now mature — the pre-registered alarm sample
+  is reached):** enter_in_zone n=64, fwd5 **+0.03%**, fwd10 **−2.33%** (37.5% win);
+  wait n=65, fwd5 **−1.38%**, fwd10 **−2.57%** (33.8% win); all n=130 fwd10 −2.42%.
+  **The inversion flagged on 2026-07-09 has NOT persisted** — enter now beats wait at
+  both horizons (decisively at fwd5, marginally at fwd10). Per the pre-registered
+  alarm ("inversion persisting at n≥50 with fwd10+"), the alarm does **not** fire and
+  vision's verdicts are not inverted. Caveat worth keeping in view: both cohorts are
+  NEGATIVE at fwd10, so vision is sorting a losing pool slightly better rather than
+  finding winners — that is a tape/entry-model observation (see E7's clean-cohort
+  note), not a vision failure.
 - **Status: OBSERVING (free grading weekly; paid bear-era study deferred).**
 
 ### E14 — Minervini Trend Template backtest (2016-2026, 10y per user decision)
@@ -522,7 +570,27 @@ that's what keeps this log honest.
   15 — did the cutoff miss a winner that RS ≥ 95 + a $300M-$10B cap filter would have
   caught?; (3) how much of a session the unattended STEP 2.5 research actually consumed.
   Widen only if (2) says yes and (3) says it's affordable.
-- **Status: OBSERVING** (track whether the 7 admits win vs the WATCH/PASS set).
+- **Weekly update 2026-08-23 — full shortlist rotation:** the scan produced **15 entirely
+  new names** (zero carryover from the 2026-07-12 list; 121/1000 passed the template, down
+  from 173). The character of the list flipped from AI/fintech growth (PENG, SEZL, DAVE,
+  ACMR) to **value/cyclical and consumer** names (staffing, refining, restaurants, retail) —
+  consistent with the funnel's top-5 macro rotating to healthcare/energy/materials/consumer
+  discretionary with technology demoted to the accel radar. Research: **6 ADMIT** (HALO,
+  SN, EAT, CAKE, LFST, VSXY), **6 WATCH** (MAN, PBF, CBRL, CXW, KMX, RNG), **3 PASS**
+  (NWL, RHI, EPC). The PASSes are again the research layer earning its keep — all three
+  passed the technical screen on price alone: **EPC cut FY26 EPS guidance in half** with EPS
+  down YoY, **RHI's** consensus 2026 EPS is BELOW 2025 with revenue declining while trading
+  at 24.9x vs a 17.6x peer group after a +62% three-month run, and **NWL** is a 1-2% grower
+  carrying $5.0B debt against $209M cash. CXW is the AMN pattern again (headline EPS
+  "largely driven by one-time gains on facility sales") → WATCH, not ADMIT.
+- **Process note (2026-08-23):** dossier skeletons for names that reappear on a later
+  shortlist were STALE — `generate_dossiers` skips existing files, so MAN's dossier still
+  showed its 2026-08-04 price ($54.80 vs $61.45 current) while research was being written
+  against it. This run regenerated all 15 skeletons with `force=True` first (safe: every
+  name was still PENDING, so no research was overwritten). If a future shortlist mixes
+  researched and unresearched names, force-regenerating would destroy research — the
+  skeleton refresh needs to become data-sections-only before it can be automated.
+- **Status: OBSERVING** (track whether the 13 admits win vs the WATCH/PASS set).
 
 ## Settled experiments
 
@@ -575,9 +643,21 @@ that's what keeps this log honest.
 - **N2 — Re-entry cooldown after thesis-break exits.** RGTI cycled enter→exit→re-enter→
   exit in 3 days (net ≈ flat, all rule-compliant). If churn like this recurs and loses
   money, add N-day cooldown after THESIS_BREAK exits. Watching.
-- **N3 — Scheduler reliability.** Daily scan missed/ran late 3 sessions running (only
-  fires while the app is open). Options: keep manual catch-up, or move to launchd like
-  the dashboard. Decide if misses keep happening.
+- **N3 — Scheduler reliability. ESCALATED 2026-08-23 — this is now the platform's
+  biggest single problem, not a nuisance.** The whole pipeline stopped after
+  **2026-08-06**: no daily scan for ~17 days (last `daily_scan_*.json` = 2026-08-06),
+  the Sunday weekly review did not run on 08-09 or 08-16, the sentiment cache went
+  **19 days stale** (152/152 tickers), and `universe_cache.json` sat 19 days old against
+  a 7-day TTL. Positions ran unmonitored — no stop re-evaluation, no exit alerts, no
+  auto-exits — for two and a half weeks while the book held 8 live positions. Nothing
+  in the system *notices* or reports this: every workflow reads "the latest file" and
+  silently accepts a stale one, so the dashboard looked normal throughout (this is the
+  same root cause as the stale-price bug the user caught on the Super-Performers tab).
+  Two separable fixes: **(a) reliability** — move the scans to launchd like the
+  dashboard, so they fire without the app open; **(b) observability, which matters even
+  if (a) lands** — a freshness check that renders loudly on the dashboard and refuses
+  to present stale scan output as current. (b) should come first; a silent failure is
+  worse than a missed run. Decision needed from the user.
 - **N4 — Insider signal never fires in mega-caps** (0/85 candidates 2026-07-08; verified
   alive, executives just don't open-market-buy). Consider replacing with a signal that
   has variance in this universe, or accept it as a rare-but-strong tiebreaker.

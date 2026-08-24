@@ -114,6 +114,14 @@ GROWTH_UNIVERSE: list[tuple[str, str]] = [
     ("LQDA",  "biotech"),           # Liquidia — YUTREPIA PAH launch ramp (~$130M Q1)
     ("EXTR",  "technology"),        # Extreme Networks — AI cloud networking, SaaS ARR +29%
     ("VCYT",  "biotech"),           # Veracyte — oncology diagnostics, +26% testing rev
+
+    # ── Discovery admits (weekly-review dossier ADMITs 2026-08-23) ──
+    ("HALO",  "biotech"),           # Halozyme — ENHANZE royalties +50%, FY guide +31-37%
+    ("SN",    "consumer"),          # SharkNinja — 13th straight double-digit qtr, rev +22%
+    ("EAT",   "consumer"),          # Brinker — 5yrs Chili's comp growth (+71% cum), EPS +23%
+    ("CAKE",  "consumer"),          # Cheesecake Factory — first $1B qtr, EPS +24%, 20% rest. margin
+    ("LFST",  "healthcare"),        # LifeStance — outpatient mental health, rev +21%, guide raised
+    ("VSXY",  "consumer"),          # Victoria's Secret — comps +13%, op income guide raised ~25%
 ]
 
 # Deduplicate while preserving order
