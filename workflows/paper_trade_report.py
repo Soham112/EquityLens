@@ -21,6 +21,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from core.paper_trading import (
     auto_execute_scan_signals,
+    split_executed,
     daily_update,
     get_pnl_history,
     load_paper_portfolio,
@@ -129,12 +130,20 @@ def print_report(summary: dict) -> None:
 
 def run_evening_update() -> dict:
     """Execute scan signals, update prices, check stops, print report."""
-    # Auto-execute any BUY signals from today's scan
-    new_trades = auto_execute_scan_signals()
+    # Auto-execute today's scan: conviction-drop trims/exits AND new BUYs.
+    # These must be reported separately — printing the whole list as "NEW PAPER
+    # POSITION" announced trims and exits as entries.
+    executed = auto_execute_scan_signals()
+    new_trades, drop_sells = split_executed(executed)
     if new_trades:
         logger.info(f"Paper trading: auto-executed {len(new_trades)} new positions")
         for t in new_trades:
             print(f"  NEW PAPER POSITION: {t.ticker} @ ${t.price:.2f} "
+                  f"({t.shares:.4f} shares = ${t.value:.2f})")
+    if drop_sells:
+        logger.info(f"Paper trading: {len(drop_sells)} conviction-drop exits/trims")
+        for t in drop_sells:
+            print(f"  CONVICTION-DROP {t.action}: {t.ticker} @ ${t.price:.2f} "
                   f"({t.shares:.4f} shares = ${t.value:.2f})")
 
     # Daily update: refresh prices, check stops, profit trims

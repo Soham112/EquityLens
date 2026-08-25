@@ -359,13 +359,21 @@ def run_daily_scan(
 
     # Paper trading: run daily monitor (auto-exit stops + profit trims) THEN auto-enter new BUYs
     try:
-        from core.paper_trading import daily_update, auto_execute_scan_signals
+        from core.paper_trading import (daily_update, auto_execute_scan_signals,
+                                        split_executed)
         monitor = daily_update()
         if monitor.get("actions_taken"):
             logger.info(f"Paper trading monitor: {monitor['actions_taken']}")
         paper_trades = auto_execute_scan_signals()
-        if paper_trades:
-            logger.info(f"Paper trading: opened {len(paper_trades)} new positions")
+        # The return list mixes conviction-drop sells with new buys — count them
+        # separately or trims get reported as opened positions.
+        new_buys, drop_sells = split_executed(paper_trades)
+        if new_buys:
+            logger.info(f"Paper trading: opened {len(new_buys)} new positions "
+                        f"({', '.join(t.ticker for t in new_buys)})")
+        if drop_sells:
+            logger.info(f"Paper trading: {len(drop_sells)} conviction-drop exits/trims "
+                        f"({', '.join(f'{t.ticker} {t.action}' for t in drop_sells)})")
     except Exception as e:
         logger.warning(f"Paper trading error: {e}")
 

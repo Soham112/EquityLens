@@ -525,10 +525,32 @@ def daily_update() -> dict:
     return summary
 
 
+def split_executed(trades: list[PaperTrade]) -> tuple[list[PaperTrade], list[PaperTrade]]:
+    """Split `auto_execute_scan_signals()` output into (new_buys, drop_action_sells).
+
+    Exists so the two reporting call sites can't drift apart or re-introduce the
+    "counted trims as new positions" bug independently.
+    """
+    buys = [t for t in trades if t.action == "BUY"]
+    sells = [t for t in trades if t.action != "BUY"]
+    return buys, sells
+
+
+def count_new_buys(trades: list[PaperTrade]) -> int:
+    """Number of genuinely NEW positions opened (excludes trims/exits)."""
+    return sum(1 for t in trades if t.action == "BUY")
+
+
 def auto_execute_scan_signals(scan_file: Optional[str] = None) -> list[PaperTrade]:
     """
-    Read today's scan results and auto-execute all BUY signals.
+    Read today's scan results and auto-execute them.
     Called automatically at end of each daily scan.
+
+    Returns EVERY trade executed — conviction-drop sells (TRIM_25 / TRIM_50 /
+    EXIT on names already held) AND new buys, in that order. It is NOT a list
+    of new positions: callers that report "opened N positions" must filter on
+    `trade.action == "BUY"` or they will count trims and exits as entries
+    (that miscount reached the 2026-08-24 scan log). Use `count_new_buys()`.
     """
     import glob
 
