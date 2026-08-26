@@ -594,6 +594,43 @@ that's what keeps this log honest.
 
 ## Settled experiments
 
+### E22 — Backtest horizons silently clamped: unreached windows reported as complete (BUG FIX)
+- **Date:** 2026-08-25 (found while investigating an apparent baseline collapse) → fixed same day.
+- **What happened:** `backtest._calendar_to_trading_days` computed
+  `trading_idx = min(round(calendar_days * 0.71), len(prices) - 1)`. The `min()`
+  clamped to the LAST AVAILABLE price instead of returning None, so a signal
+  without enough forward history still produced a "60d return" that was really
+  its current return-to-date — a short return wearing a long label, and
+  indistinguishable from a matured one in the average.
+- **How it surfaced:** the 60d baseline appeared to collapse from **alpha +2.5%
+  (beat SPY 63%)** on 2026-08-23 to **−5.6% (44%)** on 08-25. The tell that this
+  was not edge decay: **5d/10d/20d were byte-identical across both runs** — a real
+  decay does not freeze three horizons and move only the fourth. The 60d figure
+  had also been `None` in every prior run; 08-23 was its first non-null value ever,
+  so the "collapse" was a 3-point-old metric moving, not a trend.
+- **Diagnosis:** the clamp made the signal side report a 60d return for all 206
+  BUYs when only 42 had genuinely reached 43 trading bars. (The SPY leg was NOT
+  affected — it has a real maturity gate and returns None until 60 calendar days
+  elapse — so the paired sample was gated correctly at n=57, all drawn from a
+  single 10-day window, 2026-06-15..06-25. A sample that narrow grows ~30-40% per
+  session as June signals mature, which is what actually moved the mean.)
+- **Fix:** drop the clamp — an unreached horizon is MISSING DATA and returns None,
+  excluded from the average rather than diluting it. Also corrected a comment in
+  `run_signal_replay` that claimed the scan-age gate required `max_hold` days when
+  it has always required 5; reading it as max_hold hides how young the long
+  horizons' samples really are.
+- **Effect on reported numbers (same 206 signals, 2026-08-25):**
+  60d alpha **−5.6% → −2.0%**, beat_spy **44% → 52%**, IR **−0.27 → −0.09**;
+  signal-side 60d n **206 → 42**; 20d n 206 → 198 (20d alpha unchanged at −4.4%).
+- **Lesson:** the same family as the `except: pass` gotcha in CLAUDE.md — a silent
+  fallback that returns a plausible number is worse than an error, because nothing
+  downstream can tell the difference. Any horizon/window helper must distinguish
+  "not reached yet" from "measured".
+- **Standing caution:** even post-fix, the 60d bucket is n=42 from one narrow June
+  cohort that predates E18-E21. **Do not read 60d as a verdict on the strategy
+  until it spans several cohorts.** The 20d figure (n=198, alpha −4.4%, stable
+  since 08-06) is the trustworthy horizon today.
+
 ### E4 — Valuation cap must demote the signal, not just the number (BUG FIX)
 - **Date:** 2026-07-07 (found) → fixed same day
 - **What happened:** valuation gate capped conviction to 7.0 on OVERVALUED names but

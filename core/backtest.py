@@ -203,9 +203,17 @@ def _fetch_forward_prices(
 def _calendar_to_trading_days(prices: list[float], calendar_days: int) -> Optional[float]:
     """
     Rough mapping: 1 calendar day ≈ 0.71 trading days.
-    Returns price at the nearest trading-day index.
+    Returns the price at that trading-day index, or None if the series never
+    reaches it (the horizon has not elapsed yet).
+
+    Do NOT clamp to the last available price. This previously read
+    `min(round(calendar_days * 0.71), len(prices) - 1)`, which silently reported
+    a young signal's current return-to-date as a COMPLETED `calendar_days`
+    return — a shorter return wearing a longer label, indistinguishable from a
+    matured one. An unreached horizon is missing data and must be None so it is
+    excluded from the average rather than diluting it.
     """
-    trading_idx = min(round(calendar_days * 0.71), len(prices) - 1)
+    trading_idx = round(calendar_days * 0.71)
     if trading_idx < 0 or trading_idx >= len(prices):
         return None
     return prices[trading_idx]
@@ -273,7 +281,12 @@ def run_signal_replay(
         except ValueError:
             continue
 
-        # Need at least max_hold days of history after the signal date
+        # Only skip scans too young for the SHORTEST horizon. Longer horizons
+        # are gated per-signal in _calendar_to_trading_days (None until reached),
+        # so a signal can legitimately have a 5d return and no 60d one yet.
+        # (The old comment claimed max_hold days were required — the check has
+        # always been 5, and reading it as max_hold hides how young the long
+        # horizons' samples really are.)
         days_since = (datetime.date.today() - signal_date).days
         if days_since < 5:
             logger.debug(f"Skipping {date_str} — too recent for forward analysis")
