@@ -17,6 +17,62 @@ that's what keeps this log honest.
 
 ## Active experiments
 
+### E23 — Swing R/R gate: metric is not predictive (Stage 1 BACKTESTED; no logic changed yet)
+- **Date:** 2026-08-26. Answers N1. **No trading logic has been changed by this entry.**
+- **Why it was asked:** the swing book stopped entering entirely — across 6 scans,
+  51 actionable setups produced **3** that cleared the LOOSE R/R gate (1.2) and **0** on
+  each of the last two scans (max R/R 0.96 / 0.97). Chart vision was still being paid for
+  on 14-18 candidates per scan to produce nothing.
+- **The structural complaint:** R/R = (first resistance − entry) / (entry − chart stop),
+  but **no exit path ever trades to that target.** Verified three ways: no `target`
+  reference in `growth_paper_trading` or `momentum_monitor`, and the backtest's own
+  `_simulate` exits only on stop / trailing stop / stall / time. The gate scores a trade
+  the system never makes, while the risk leg uses an S1-based stop sitting 20-33% below
+  entry on extended names (DXCM 32.8% risk vs 4.3% reward → R/R 0.13). Extended,
+  trending, near-high names — the Minervini profile this platform exists to buy — are
+  mechanically the ones it rejects.
+- **Pre-registered rule (written into `rr_predictiveness_backtest`'s docstring before the
+  first run):** PREDICTIVE if sub-1.2 entries underperform ≥1.2 entries by >3 pts of
+  average realized return with bucket means rising in R/R — in which case the gate earns
+  its keep and an empty swing book is CORRECT. NOT PREDICTIVE if sub-1.2 performs as well
+  or better. Required n≥50 per side.
+- **Method:** `strategy_backtest.rr_predictiveness_backtest()` — 1,027 historical setups
+  (2022-2026), each assigned the R/R the live formula would have produced (using
+  `_r1_resistance`, an exact mirror of `_s1_support` on swing highs, as the free numeric
+  stand-in for the vision target), then run through the **E12 live swing exit engine**
+  (S1−0.5×ATR, no ATR floor, trail@30/15, stall). No paid API.
+- **Result — NOT PREDICTIVE:**
+
+  | R/R bucket | n | avg | median | win |
+  |---|---|---|---|---|
+  | <0.5 | 746 | +0.09% | −0.06% | 49.5% |
+  | 0.5-1.2 | 221 | +0.94% | −0.69% | 46.2% |
+  | 1.2-2.0 | 32 | +1.23% | +0.18% | 50.0% |
+  | 2.0-3.0 | 19 | **−1.90%** | −2.25% | 31.6% |
+  | ≥3.0 | 9 | **−2.51%** | −2.34% | 22.2% |
+
+  Below gate (n=967): **+0.28%**, win 48.7%. At/above gate (n=60): **−0.32%**, win 40.0%.
+  Gap **−0.6 pts** — the setups the gate prefers did slightly WORSE. Era-split flips sign
+  (2022-23 above +0.56%, 2024-26 above −1.04%), i.e. no stable relationship.
+- **Honest reading — this says "noise", NOT "low R/R is good":** every bucket mean sits
+  within ±2.5% and the distribution is near flat, so the correct conclusion is that
+  R/R-as-computed does not sort outcomes at all. The apparent "high R/R is worse" tail
+  rests on n=19 and n=9 and must NOT be traded on. What is solid: the gate discards ~94%
+  of candidates on a metric uncorrelated with realized return.
+- **Bigger finding that outranks the gate:** average realized return is ≈0% across EVERY
+  bucket. Under the current exit engine this setup population shows **no edge at all** —
+  a far more important problem than which threshold filters it. (Caveat: this replay uses
+  the loose 2+/7 screener population, not the full live gate stack, so it is a broader,
+  weaker cohort than what would actually be traded.)
+- **Status: Stage 1 COMPLETE, no logic changed.** Stage 2 (replace the reward leg with a
+  measured-move/ATR target, or drop R/R and gate on stop-distance + trend quality) is NOT
+  automatically justified: fixing a noisy gate so that more ≈0%-edge trades get through is
+  not obviously an improvement. **The next question should be the edge one, not the gate
+  one** — decide with the user before touching entry logic.
+- **Incidental bug found:** the `EXIT_VARIANTS` entry labelled `"live"` is the PRE-E12
+  config (still carries the 2.5×ATR floor demoted on 2026-07-09), so anyone reading that
+  row from `run_all()` is reading stops the swing book has not used since. Not yet fixed.
+
 ### E18 — Stage-4 hard veto on long-term BUYs (Minervini stage analysis) (SHIPPED)
 - **Hypothesis:** "Price confirms fundamentals" — no fundamental case justifies a long
   entry while a stock trades in a Stage 4 downtrend (price < MA50 < MA200). The swing
@@ -672,11 +728,16 @@ that's what keeps this log honest.
 
 ## Open questions / next experiments (not started)
 
-- **N1 — Measured-move targets for near-high setups.** Nearest-resistance targets
-  mechanically produce R/R 0.5–1.2 for stocks near 52w highs (2026-07-08: 1 of ~12
-  charted setups cleared R/R 2.0). E7's `strict:risk_reward` cohort will show whether
-  low-measured-R/R entries actually lose; if they WIN, the fix is the target formula,
-  not the gate. Decide after that cohort reaches 10 closed.
+- **N1 — Measured-move targets for near-high setups. ANSWERED 2026-08-26 by backtest
+  (Stage 1): the R/R metric is NOT PREDICTIVE. Escalated to E23.**
+  Original note: nearest-resistance targets mechanically produce R/R 0.5–1.2 for stocks
+  near 52w highs (2026-07-08: 1 of ~12 charted setups cleared R/R 2.0). The plan was to
+  wait for E7's `strict:risk_reward` cohort to reach 10 closed trades — **that plan was
+  unworkable and this is the lesson worth keeping: the cohort can never populate,
+  because the gate rejects the very entries that would fill it.** A self-adapting gate
+  cannot gather evidence about a threshold that admits nothing. When a gate blocks
+  ~94% of candidates, the ratchet is structurally deadlocked and the question has to be
+  settled offline instead. See E23.
 - **N2 — Re-entry cooldown after thesis-break exits.** RGTI cycled enter→exit→re-enter→
   exit in 3 days (net ≈ flat, all rule-compliant). If churn like this recurs and loses
   money, add N-day cooldown after THESIS_BREAK exits. Watching.

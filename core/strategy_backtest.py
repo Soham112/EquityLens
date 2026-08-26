@@ -300,6 +300,142 @@ def exit_backtest(entries, raw) -> dict:
     return report, by_era
 
 
+def _r1_resistance(high_arr, entry_idx, entry_price, lookback=120, w=5, cluster_pct=0.015):
+    """Nearest tested resistance ABOVE entry — exact mirror of _s1_support, using
+    5-bar swing HIGHS. This is the numeric stand-in for the vision prompt's
+    "first realistic target at next resistance", so the replayed R/R matches the
+    live metric's intent without replaying (paid) vision over history."""
+    hi = max(0, entry_idx - lookback)
+    highs = high_arr[hi:entry_idx + 1]
+    n = len(highs)
+    raw = [highs[i] for i in range(w, n - w)
+           if highs[i] == max(highs[i - w:i + w + 1])]
+    if not raw:
+        return None
+    raw.sort()
+    clusters = [[raw[0]]]
+    for p in raw[1:]:
+        if (p - clusters[-1][-1]) / clusters[-1][-1] < cluster_pct:
+            clusters[-1].append(p)
+        else:
+            clusters.append([p])
+    tested = [sum(c) / len(c) for c in clusters if len(c) >= 2]
+    above = [p for p in tested if p > entry_price]
+    return min(above) if above else None
+
+
+# ── N1 / Stage 1: is the live R/R metric predictive at all? ────────────────────
+# The live swing gate rejects entries whose R/R = (first resistance - entry) /
+# (entry - chart stop) falls below the threshold — but NO exit path ever trades
+# to that target (exits are stop / trailing stop / stall / thesis break). This
+# replays historical setups, assigns each the R/R the live formula would have
+# produced, simulates the REAL exit engine, and asks whether R/R sorted outcomes.
+#
+# PRE-REGISTERED VERDICT RULE (written before the first run, 2026-08-26):
+#   PREDICTIVE  — entries below the loose gate (R/R < 1.2) underperform those at
+#                 or above it by >3 percentage points of average realized return,
+#                 AND the bucket means rise broadly with R/R. Then the gate earns
+#                 its keep, an empty swing book is CORRECT in this regime, and the
+#                 fix is to stop paying for vision on setups that cannot qualify.
+#   NOT PREDICTIVE — the sub-1.2 bucket performs as well as or better than the
+#                 >=1.2 bucket (within 3 pts, or better). Then the gate is
+#                 discarding tradeable setups and the METRIC is the problem;
+#                 proceed to Stage 2 (replace the reward leg / regate).
+#   Either way this changes NO trading logic on its own.
+
+def rr_predictiveness_backtest(raw=None, tickers=None, entries=None) -> dict:
+    import numpy as np
+
+    if raw is None or entries is None:
+        _, entries, raw = screener_backtest()
+
+    # Current live SWING exit engine (E12): S1 - 0.5*ATR primary, 2.5*ATR only
+    # as the no-S1 fallback. NOTE the variant literally labelled "live" in
+    # EXIT_VARIANTS is the PRE-E12 config (it carries the 2.5*ATR floor) — using
+    # it here would simulate stops the swing book no longer uses.
+    cfg = dict(use_s1=True, atr_mult=None, trail_at=0.30, trail_pct=0.15,
+               stall=True, time_stop=None)
+
+    if len(entries) > MAX_ENTRIES_SIM:
+        random.seed(11)
+        entries = random.sample(entries, MAX_ENTRIES_SIM)
+
+    rows = []
+    arrays = {}
+    for t, i, n_sig, date in entries:
+        try:
+            if t not in arrays:
+                df = raw[t].dropna(subset=["Close"])
+                arrays[t] = (df["Close"].values, df["Low"].values, df["High"].values,
+                             df["Volume"].values, df["Volume"].rolling(90).mean().values)
+            closes, lows, highs, vols, v90s = arrays[t]
+            if i + 2 >= len(closes) or i < 25:
+                continue
+            entry = float(closes[i])
+            seg_hi = highs[i - 20:i + 1]
+            seg_lo = lows[i - 20:i + 1]
+            seg_cl = closes[i - 21:i + 1]
+            tr = [max(seg_hi[j] - seg_lo[j], abs(seg_hi[j] - seg_cl[j]),
+                      abs(seg_lo[j] - seg_cl[j])) for j in range(len(seg_hi))]
+            atr = float(np.mean(tr))
+            if atr <= 0:
+                continue
+            s1 = _s1_support(lows, i, entry)
+            r1 = _r1_resistance(highs, i, entry)
+            stop = (s1 - 0.5 * atr) if s1 is not None else (entry - 2.5 * atr)
+            risk = entry - stop
+            if risk <= 0 or r1 is None:
+                continue
+            rr = (r1 - entry) / risk
+            ret, hold, why = _simulate(closes, lows, vols, v90s, i, cfg, s1, atr)
+            rows.append({"rr": rr, "ret": ret, "hold": hold, "why": why,
+                         "n_sig": n_sig, "era": "2022-23" if date < "2024-01-01" else "2024-26"})
+        except Exception:
+            continue
+
+    def stats(rs):
+        if not rs:
+            return {"n": 0}
+        v = [r["ret"] for r in rs]
+        return {"n": len(v), "avg": round(float(np.mean(v)), 4),
+                "median": round(float(np.median(v)), 4),
+                "win_rate": round(float(np.mean([x > 0 for x in v])), 3),
+                "avg_hold": round(float(np.mean([r["hold"] for r in rs])), 1)}
+
+    buckets = [("<0.5", 0.0, 0.5), ("0.5-1.2", 0.5, 1.2), ("1.2-2.0", 1.2, 2.0),
+               ("2.0-3.0", 2.0, 3.0), (">=3.0", 3.0, 1e9)]
+    by_bucket = {name: stats([r for r in rows if lo <= r["rr"] < hi])
+                 for name, lo, hi in buckets}
+    below = [r for r in rows if r["rr"] < 1.2]
+    above = [r for r in rows if r["rr"] >= 1.2]
+    b_s, a_s = stats(below), stats(above)
+    gap = (a_s.get("avg", 0) - b_s.get("avg", 0)) * 100 if below and above else None
+
+    verdict = "INCONCLUSIVE (insufficient sample)"
+    if gap is not None and min(len(below), len(above)) >= 50:
+        verdict = ("PREDICTIVE — gate earns its keep" if gap > 3.0
+                   else "NOT PREDICTIVE — metric is the problem, proceed to Stage 2")
+
+    report = {
+        "generated_at": datetime.datetime.now().isoformat(timespec="seconds"),
+        "n_setups": len(rows),
+        "exit_engine": "E12 live swing (S1-0.5ATR, no ATR floor, trail@30/15, stall)",
+        "rr_source": "numeric mirror of vision target: nearest tested resistance above entry",
+        "by_rr_bucket": by_bucket,
+        "below_loose_gate_1.2": b_s,
+        "at_or_above_loose_gate_1.2": a_s,
+        "gap_pts_above_minus_below": round(gap, 2) if gap is not None else None,
+        "by_era": {e: {"below_1.2": stats([r for r in below if r["era"] == e]),
+                       "at_or_above_1.2": stats([r for r in above if r["era"] == e])}
+                   for e in ("2022-23", "2024-26")},
+        "verdict": verdict,
+    }
+    os.makedirs("data", exist_ok=True)
+    with open("data/rr_predictiveness_backtest.json", "w") as f:
+        json.dump(report, f, indent=1)
+    return report
+
+
 def run_all() -> dict:
     screener, entries, raw = screener_backtest()
     exits, exits_by_era = exit_backtest(entries, raw)
