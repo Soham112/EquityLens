@@ -436,6 +436,132 @@ def rr_predictiveness_backtest(raw=None, tickers=None, entries=None) -> dict:
     return report
 
 
+# ── E24 / Stage 1b: does ANY setup-quality x exit-policy combination show edge? ─
+# Stage 1 (E23) found average realized return ~0% in every R/R bucket, but "0%" is
+# meaningless without a benchmark: 0% over a 21-day hold is a win in 2022 and a
+# loss in 2024. This measures every combination against a MATCHED-WINDOW SPY
+# hold (same entry date, same holding period) so the comparison is like-for-like.
+#
+# PRE-REGISTERED VERDICT RULE (written before the first run, 2026-08-26):
+#   EDGE EXISTS   — at least one (quality bucket x exit variant) cell beats its
+#                   matched SPY benchmark by >2 pts of average return AND wins
+#                   >50% of the time AND holds that sign in BOTH eras, at n>=50.
+#                   Then the swing thesis is sound and the work is selection/exit
+#                   tuning toward that cell.
+#   NO EDGE       — no cell clears that bar. Then no entry-gate change can rescue
+#                   the swing book and the honest recommendation is to stop running
+#                   it in its current form, NOT to retune thresholds.
+#   Cells failing only the era-consistency test are reported as FRAGILE, never as
+#   edge — that is the overfitting trap this rule exists to block.
+#   This function changes NO trading logic.
+
+def swing_edge_backtest(raw=None, entries=None) -> dict:
+    import numpy as np
+
+    if raw is None or entries is None:
+        _, entries, raw = screener_backtest()
+
+    if len(entries) > MAX_ENTRIES_SIM:
+        random.seed(11)
+        entries = random.sample(entries, MAX_ENTRIES_SIM)
+
+    spy_close = raw["SPY"]["Close"].dropna()
+    spy_idx = {d.date().isoformat(): k for k, d in enumerate(spy_close.index)}
+    spy_vals = spy_close.values
+
+    rows = []
+    arrays = {}
+    for t, i, n_sig, date in entries:
+        try:
+            if t not in arrays:
+                df = raw[t].dropna(subset=["Close"])
+                arrays[t] = (df["Close"].values, df["Low"].values, df["High"].values,
+                             df["Volume"].values, df["Volume"].rolling(90).mean().values,
+                             df["Close"].rolling(50).mean().values,
+                             df["Close"].rolling(200).mean().values)
+            closes, lows, highs, vols, v90s, ma50, ma200 = arrays[t]
+            if i + 2 >= len(closes) or i < 25:
+                continue
+            entry = float(closes[i])
+            seg_hi, seg_lo = highs[i - 20:i + 1], lows[i - 20:i + 1]
+            seg_cl = closes[i - 21:i + 1]
+            tr = [max(seg_hi[j] - seg_lo[j], abs(seg_hi[j] - seg_cl[j]),
+                      abs(seg_lo[j] - seg_cl[j])) for j in range(len(seg_hi))]
+            atr = float(np.mean(tr))
+            if atr <= 0:
+                continue
+            s1 = _s1_support(lows, i, entry)
+            # Stage-2 proxy: price > MA50 > MA200 (cheap stand-in for the full template)
+            m50, m200 = ma50[i], ma200[i]
+            stage2 = bool(not np.isnan(m50) and not np.isnan(m200)
+                          and entry > m50 > m200)
+            sk = spy_idx.get(date)
+            for name, cfg in EXIT_VARIANTS.items():
+                ret, hold, why = _simulate(closes, lows, vols, v90s, i, cfg, s1, atr)
+                # matched SPY: same entry date, same realized holding period
+                bench = None
+                if sk is not None and sk + hold < len(spy_vals):
+                    bench = float(spy_vals[sk + hold] / spy_vals[sk] - 1)
+                rows.append({"exit": name, "n_sig": min(n_sig, 4), "stage2": stage2,
+                             "ret": ret, "bench": bench, "hold": hold,
+                             "era": "2022-23" if date < "2024-01-01" else "2024-26"})
+        except Exception:
+            continue
+
+    def cell(rs):
+        rs = [r for r in rs if r["bench"] is not None]
+        if not rs:
+            return {"n": 0}
+        v = [r["ret"] for r in rs]
+        ex = [r["ret"] - r["bench"] for r in rs]
+        return {"n": len(v),
+                "avg": round(float(np.mean(v)), 4),
+                "spy": round(float(np.mean([r["bench"] for r in rs])), 4),
+                "excess": round(float(np.mean(ex)), 4),
+                "win_rate": round(float(np.mean([x > 0 for x in v])), 3),
+                "beat_spy": round(float(np.mean([x > 0 for x in ex])), 3)}
+
+    grid = {}
+    for name in EXIT_VARIANTS:
+        for nsig in (2, 3, 4):
+            for st in (True, False):
+                sub = [r for r in rows if r["exit"] == name
+                       and r["n_sig"] == nsig and r["stage2"] == st]
+                key = f"{name} | {nsig}+sig | stage2={st}"
+                c = cell(sub)
+                if c.get("n", 0) >= 50:
+                    c["by_era"] = {e: cell([r for r in sub if r["era"] == e])
+                                   for e in ("2022-23", "2024-26")}
+                    grid[key] = c
+
+    winners, fragile = [], []
+    for k, c in grid.items():
+        if c["excess"] > 0.02 and c["win_rate"] > 0.50:
+            eras = c.get("by_era", {})
+            ok = all(eras.get(e, {}).get("excess", -1) > 0 for e in ("2022-23", "2024-26"))
+            (winners if ok else fragile).append((k, c["excess"], c["win_rate"]))
+
+    winners.sort(key=lambda x: -x[1])
+    fragile.sort(key=lambda x: -x[1])
+    report = {
+        "generated_at": datetime.datetime.now().isoformat(timespec="seconds"),
+        "n_setups": len({(r["n_sig"], r["era"], r["hold"], r["ret"]) for r in rows}),
+        "n_cells": len(grid),
+        "benchmark": "matched-window SPY (same entry date, same realized hold)",
+        "verdict": ("EDGE EXISTS" if winners else
+                    ("NO EDGE (some FRAGILE cells — era-inconsistent)" if fragile
+                     else "NO EDGE")),
+        "winners": [{"cell": k, "excess": e, "win_rate": w} for k, e, w in winners[:10]],
+        "fragile_era_inconsistent": [{"cell": k, "excess": e, "win_rate": w}
+                                     for k, e, w in fragile[:10]],
+        "grid": grid,
+    }
+    os.makedirs("data", exist_ok=True)
+    with open("data/swing_edge_backtest.json", "w") as f:
+        json.dump(report, f, indent=1)
+    return report
+
+
 def run_all() -> dict:
     screener, entries, raw = screener_backtest()
     exits, exits_by_era = exit_backtest(entries, raw)

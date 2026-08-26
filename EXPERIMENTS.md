@@ -17,6 +17,49 @@ that's what keeps this log honest.
 
 ## Active experiments
 
+### E24 — Does the swing setup population have ANY edge? (BACKTESTED; no logic changed)
+- **Date:** 2026-08-26. Follows E23's bigger finding (~0% average return in every R/R
+  bucket) — "0%" is meaningless without a benchmark, so this measures every
+  (setup-quality × exit-policy) cell against a **matched-window SPY hold** (same entry
+  date, same realized holding period). **No trading logic changed.**
+- **Method:** `strategy_backtest.swing_edge_backtest()` — 7 exit variants × signal-count
+  buckets (2/3/4+) × Stage-2 proxy (price > MA50 > MA200), 2022-2026, n≥50 per cell →
+  21 qualifying cells. Same replay engine as E11/E23. No paid API.
+- **Pre-registered rule (written before the run):** EDGE if a cell beats matched SPY by
+  **>2 pts** average AND **win rate >50%** AND the excess holds sign in BOTH eras.
+  Era-inconsistent cells reported as FRAGILE, never as edge.
+- **VERDICT: NO EDGE by the pre-registered rule — no cell cleared the bar.**
+- **But the sub-threshold picture is not nothing, and the rule I wrote was partly
+  miscalibrated. Recording both, and NOT moving the goalposts:**
+  - **All 21 cells had POSITIVE excess** (+0.01% to +1.45%). Direction is consistent.
+  - Best cell — `S1 only (no ATR floor) | 2+sig | stage2=False`, n=234: excess
+    **+1.45%**, win **51.3%**, era-consistent (**+1.19%** 2022-23 / **+1.75%** 2024-26).
+    It passed the win-rate and era tests and missed **only** the 2-pt magnitude bar.
+  - **Two components of my bar were poorly chosen, in hindsight:** (a) >2 pts on a
+    ~21-day average hold is demanding — +1.45% per 21-day trade is roughly 17%/yr excess
+    if repeatable; (b) **win rate >50% is the wrong shape for a trend strategy** — most
+    cells win <50% while carrying positive excess, which is the normal right-tailed
+    trend-following profile, so that condition biased the test against the very
+    behaviour the strategy is built on. Per the standing rule, the "how to judge" line is
+    **NOT** rewritten after the fact and this verdict stands as NO EDGE. A properly
+    pre-registered successor is the correct route, not reinterpretation.
+- **Genuinely useful negative result (the era guard earning its keep):** the highest-n
+  promising family, `3+sig | stage2=True` (n=483, ~+1.1-1.2% blended across exit
+  variants), is **era-fragile** — **+3.0%** excess in 2022-23 collapsing to **≈0.0% /
+  −0.3%** in 2024-26. Anyone reading only the blended number would have shipped a
+  2022-23 artifact. This is exactly the trap the both-eras condition exists to block.
+- **Counter-intuitive and unresolved:** the era-consistent cell is `stage2=False`
+  (price NOT above MA50>MA200) while `2+sig | stage2=True` (n=3283) shows ~0.01% excess.
+  That runs against the Minervini thesis (E14/E15) and should NOT be acted on: n=234 is
+  thin, it is one cell out of 21 examined, and selection effects are live.
+- **Standing caveats:** loose 2+/7 screener population (not the live gate stack), no
+  chart-vision confirmation (cannot be replayed free), today's universe → survivorship
+  bias, no transaction costs.
+- **Status: COMPLETE, no logic changed.** Recommendation is NOT to retune entry gates on
+  this. If pursued, the successor experiment should pre-register a defensible bar
+  (magnitude appropriate to hold length; no win-rate floor for a right-tailed strategy)
+  and test the ONE era-consistent cell out-of-sample before anything ships.
+
 ### E23 — Swing R/R gate: metric is not predictive (Stage 1 BACKTESTED; no logic changed yet)
 - **Date:** 2026-08-26. Answers N1. **No trading logic has been changed by this entry.**
 - **Why it was asked:** the swing book stopped entering entirely — across 6 scans,
