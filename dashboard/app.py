@@ -35,7 +35,11 @@ def _latest_scan() -> Optional[dict]:
     if not files:
         return None
     with open(files[0]) as f:
-        return json.load(f)
+        scan = json.load(f)
+    # The payload carries `timestamp`, not `date` — stamp the filename's date so
+    # freshness checks have an authoritative day to judge without guessing keys.
+    scan.setdefault("_source_date", files[0].stem.rsplit("_", 1)[-1])
+    return scan
 
 
 def _latest_health() -> Optional[dict]:
@@ -66,7 +70,28 @@ async def get_scan():
             "empty": True,
             "message": "No scan data yet — next scan runs Mon–Fri at 9:35 AM automatically.",
         })
+    # Stamp the payload's own age so no consumer can render it as current
+    # without seeing how old it is (the 17-day silent outage, 2026-08-06..23).
+    try:
+        import sys
+        sys.path.insert(0, str(Path(__file__).parent.parent))
+        from core.pipeline_health import scan_freshness
+        scan_date = (scan.get("_source_date")
+                     or str(scan.get("timestamp", ""))[:10] or None)
+        scan["_freshness"] = scan_freshness(scan_date)
+    except Exception as e:
+        logger.debug(f"scan freshness stamp failed: {e}")
     return scan
+
+
+@app.get("/api/health/pipeline")
+async def health_pipeline():
+    """Freshness of every artifact the dashboard renders from — powers the
+    stale-data banner. FRESH / STALE / MISSING, worst-of in `status`."""
+    import sys
+    sys.path.insert(0, str(Path(__file__).parent.parent))
+    from core.pipeline_health import pipeline_health
+    return pipeline_health()
 
 
 @app.get("/api/names")

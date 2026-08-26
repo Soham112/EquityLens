@@ -106,6 +106,10 @@
   </header>
 
   <main>
+    <!-- Stale-data banner: the pipeline died silently for 17 days once and the
+         dashboard looked normal throughout. This is the thing that says so. -->
+    <div class="stale-banner" id="stale-banner"></div>
+
     <!-- VIX Spike Banner -->
     <div class="vix-banner" id="vix-banner">
       ⚠ VIX SPIKE — New buy signals paused. All positions have widened stops.
@@ -2411,6 +2415,39 @@
   }
 
   // Auto-load paper tab badge and pending count on page load
+  // ── Stale-data banner (pipeline freshness) ──
+  // The pipeline once died for 17 days while every screen kept rendering the
+  // last good scan as if it were today's. This surfaces that, loudly.
+  async function loadPipelineHealth() {
+    const el = document.getElementById('stale-banner');
+    if (!el) return;
+    try {
+      const res = await fetch('/api/health/pipeline');
+      const h = await res.json();
+      if (h.status === 'FRESH') { el.classList.remove('visible', 'critical'); return; }
+
+      const bad = (h.artifacts || []).filter(a => a.status !== 'FRESH');
+      const worst = bad.reduce((m, a) => Math.max(m, a.age_trading_days || 0), 0);
+      // A missing artifact, or a scan more than a full trading week behind,
+      // is a different severity from one late run.
+      const critical = h.status === 'MISSING' || worst >= 5;
+      el.classList.toggle('critical', critical);
+      el.classList.add('visible');
+
+      const rows = bad.map(a =>
+        `${a.name} — ${a.status === 'MISSING' ? 'MISSING' :
+          `${a.age_trading_days} trading day(s) old (last ${a.last_updated})`}`
+      ).join(' · ');
+      el.innerHTML =
+        `${critical ? '⛔' : '⚠'} STALE DATA — figures on screen are not current.` +
+        `<span class="stale-detail">${rows}</span>`;
+    } catch (e) {
+      console.error('loadPipelineHealth:', e);
+    }
+  }
+  loadPipelineHealth();
+  setInterval(loadPipelineHealth, 5 * 60 * 1000);
+
   async function initBadges() {
     const res = await fetch('/api/decisions/pending');
     const data = await res.json();
