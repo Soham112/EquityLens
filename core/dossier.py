@@ -32,6 +32,11 @@ _CACHE_DIR = "data/bigdata_cache"
 PENDING_MARKER = "PENDING RESEARCH"
 _PENDING_VERDICT = f"_{PENDING_MARKER} — not yet reviewed (ADMIT / WATCH / PASS)._"
 
+# Boundary between the auto-generated DATA half and the researched half. Every
+# line before it is regenerable from free data; everything from it onward is
+# hand/agent-written and must never be clobbered by a refresh.
+RESEARCH_MARKER = "<!-- Research below"
+
 
 def read_verdict(ticker: str) -> dict:
     """Extract the dossier's Verdict for the Super-Performers screen.
@@ -255,9 +260,68 @@ def build_dossier(item: dict, force: bool = False) -> str | None:
     return path
 
 
-def generate_dossiers(shortlist: list[dict] | None = None, force: bool = False) -> dict:
+def _split_dossier(text: str) -> tuple[str, str | None]:
+    """(data_half, research_half). research_half is None if the boundary is absent."""
+    idx = text.find(RESEARCH_MARKER)
+    if idx == -1:
+        return text, None
+    return text[:idx], text[idx:]
+
+
+def refresh_dossier_data(item: dict) -> str | None:
+    """Regenerate ONLY the data sections of an existing dossier, in place.
+
+    Why this exists: `build_dossier` skips names that already have a file, so a
+    name reappearing on a later shortlist kept its ORIGINAL data forever — on
+    2026-08-23 MAN's dossier still showed its 08-04 price ($54.80) while the
+    live shortlist said $61.45, and research was being written against numbers
+    two and a half weeks old. The obvious fix, force=True, is destructive: it
+    resets the research sections to PENDING. This does the safe half — fresh
+    data, research preserved byte-for-byte.
+
+    Returns the path, or None if it declined to touch the file.
+    """
+    ticker = item.get("ticker")
+    if not ticker:
+        return None
+    path = os.path.join(DOSSIER_DIR, f"{ticker}.md")
+    if not os.path.exists(path):
+        return build_dossier(item)
+
+    original = open(path).read()
+    _, research = _split_dossier(original)
+    if research is None:
+        # No boundary to splice on (hand-edited or pre-marker file). Refusing is
+        # correct: a refresh that cannot find the seam would overwrite research.
+        logger.warning(f"[Dossier] {ticker}: no research marker — refresh skipped, "
+                       "regenerate manually if the data sections matter")
+        return None
+
+    try:
+        build_dossier(item, force=True)          # fresh data + PENDING research
+        fresh_data, _ = _split_dossier(open(path).read())
+        with open(path, "w") as f:
+            f.write(fresh_data + research)       # graft the real research back on
+    except Exception:
+        with open(path, "w") as f:               # never leave it half-written
+            f.write(original)
+        raise
+    logger.info(f"[Dossier] refreshed data sections for {ticker} (research kept)")
+    return path
+
+
+def generate_dossiers(shortlist: list[dict] | None = None, force: bool = False,
+                      refresh_data: bool = True) -> dict:
     """Build dossiers for a discovery shortlist (defaults to the latest scan).
-    Skips names that already have one unless force=True. Returns a summary."""
+
+    New names get a fresh skeleton. Names that ALREADY have a dossier get their
+    data sections refreshed in place (`refresh_data=True`, the default) with the
+    research preserved — previously they were skipped outright and carried their
+    first-generation prices forever.
+
+    `force=True` is the destructive full reset (research back to PENDING) and is
+    only safe when every name is still unresearched; it takes precedence.
+    """
     if shortlist is None:
         try:
             from core.discovery import load_latest_discovery
@@ -266,17 +330,25 @@ def generate_dossiers(shortlist: list[dict] | None = None, force: bool = False) 
             logger.warning(f"[Dossier] could not load discovery shortlist: {e}")
             shortlist = []
 
-    built, skipped, errored = [], [], []
+    built, refreshed, skipped, errored = [], [], [], []
     for item in shortlist:
         t = item.get("ticker")
         try:
             path = build_dossier(item, force=force)
-            (built if path else skipped).append(t)
+            if path:
+                built.append(t)
+            elif refresh_data:
+                # existed → keep the research, re-pull the numbers
+                refreshed.append(t) if refresh_dossier_data(item) else skipped.append(t)
+            else:
+                skipped.append(t)
         except Exception as e:
             logger.warning(f"[Dossier] {t} failed: {e}")
             errored.append(t)
-    logger.info(f"[Dossier] built {len(built)}, skipped {len(skipped)}, errored {len(errored)}")
-    return {"built": built, "skipped": skipped, "errored": errored}
+    logger.info(f"[Dossier] built {len(built)}, refreshed {len(refreshed)}, "
+                f"skipped {len(skipped)}, errored {len(errored)}")
+    return {"built": built, "refreshed": refreshed,
+            "skipped": skipped, "errored": errored}
 
 
 if __name__ == "__main__":
