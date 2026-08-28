@@ -45,7 +45,8 @@ def read_verdict(ticker: str) -> dict:
     if not os.path.exists(p):
         return {"status": "NONE", "text": ""}
     try:
-        lines = open(p).read().splitlines()
+        with open(p) as f:
+            lines = f.read().splitlines()
     except Exception:
         return {"status": "NONE", "text": ""}
     for i, line in enumerate(lines):
@@ -77,7 +78,8 @@ def needs_research(ticker: str) -> bool:
     if not os.path.exists(p):
         return False
     try:
-        return PENDING_MARKER in open(p).read()
+        with open(p) as f:
+            return PENDING_MARKER in f.read()
     except Exception:
         return False
 
@@ -101,7 +103,8 @@ def _load_sentiment(ticker: str) -> dict | None:
     if not os.path.exists(p):
         return None
     try:
-        return json.load(open(p))
+        with open(p) as f:
+            return json.load(f)
     except Exception:
         return None
 
@@ -288,7 +291,8 @@ def refresh_dossier_data(item: dict) -> str | None:
     if not os.path.exists(path):
         return build_dossier(item)
 
-    original = open(path).read()
+    with open(path) as f:
+        original = f.read()
     _, research = _split_dossier(original)
     if research is None:
         # No boundary to splice on (hand-edited or pre-marker file). Refusing is
@@ -299,7 +303,8 @@ def refresh_dossier_data(item: dict) -> str | None:
 
     try:
         build_dossier(item, force=True)          # fresh data + PENDING research
-        fresh_data, _ = _split_dossier(open(path).read())
+        with open(path) as f:
+            fresh_data, _ = _split_dossier(f.read())
         with open(path, "w") as f:
             f.write(fresh_data + research)       # graft the real research back on
     except Exception:
