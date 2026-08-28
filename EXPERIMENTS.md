@@ -32,7 +32,7 @@ that's what keeps this log honest.
 - **But the sub-threshold picture is not nothing, and the rule I wrote was partly
   miscalibrated. Recording both, and NOT moving the goalposts:**
   - **All 21 cells had POSITIVE excess** (+0.01% to +1.45%). Direction is consistent.
-  - Best cell — `S1 only (no ATR floor) | 2+sig | stage2=False`, n=234: excess
+  - Best cell — `S1 only (no ATR floor) [PRODUCTION since E12] | 2+sig | stage2=False`, n=234: excess
     **+1.45%**, win **51.3%**, era-consistent (**+1.19%** 2022-23 / **+1.75%** 2024-26).
     It passed the win-rate and era tests and missed **only** the 2-pt magnitude bar.
   - **Two components of my bar were poorly chosen, in hindsight:** (a) >2 pts on a
@@ -503,6 +503,12 @@ that's what keeps this log honest.
   350-400 charts; not yet run).
 - **Part B findings (exit engine — the levers matter enormously; variant spread
   0.64%-1.56% avg/trade, win 37-53%):**
+  - _Naming note added 2026-08-26 (numbers below unchanged): "Live config" here means
+    the config that was live WHEN E11 RAN — S1−0.5×ATR **with** the 2.5×ATR floor.
+    E12 then made "S1 only" production. The `EXIT_VARIANTS` key was still labelled
+    "live" until 2026-08-26, so between E12 and that date `run_all()` reported the
+    superseded stops as current. Renamed to "pre-E12 (...)"; keys now describe config,
+    never status._
   - Live config: +1.07% avg, 49% win, 17.6d hold. Middle of the pack.
   - **Stall exit is the biggest lever**: it ends 63% of trades. Removing it → +1.56%
     avg (best) but 37% win, −4.95% median, 38d holds — stall trades expectancy for

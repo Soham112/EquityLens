@@ -12,7 +12,35 @@ import unittest
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from core.backtest import _analyze_forward, _calendar_to_trading_days
-from core.strategy_backtest import _r1_resistance, _s1_support
+from core.strategy_backtest import (EXIT_VARIANTS, PRODUCTION_EXIT_CFG,
+                                    _r1_resistance, _s1_support)
+
+
+class ProductionExitConfig(unittest.TestCase):
+    """The backtest's idea of "production" must match what the book actually does.
+
+    Until 2026-08-26 the EXIT_VARIANTS key labelled "live" was the PRE-E12 config,
+    so run_all() reported superseded stops as current. Guards both the config
+    itself and the naming convention that caused it.
+    """
+
+    def test_matches_e12_formula(self):
+        """E12: S1-0.5xATR primary, 2.5xATR only as the no-S1 fallback.
+        atr_mult=None is what makes _simulate skip the floor override."""
+        self.assertTrue(PRODUCTION_EXIT_CFG["use_s1"])
+        self.assertIsNone(PRODUCTION_EXIT_CFG["atr_mult"])
+        self.assertTrue(PRODUCTION_EXIT_CFG["stall"])
+        self.assertIsNone(PRODUCTION_EXIT_CFG["time_stop"])
+
+    def test_exactly_one_variant_is_production(self):
+        matching = [k for k, v in EXIT_VARIANTS.items() if v == PRODUCTION_EXIT_CFG]
+        self.assertEqual(len(matching), 1)
+        self.assertIn("PRODUCTION", matching[0])
+
+    def test_no_variant_key_uses_a_status_word(self):
+        """Keys describe CONFIG, never status — status words go stale silently."""
+        for key in EXIT_VARIANTS:
+            self.assertFalse(key.lower().startswith("live"), f"stale status label: {key}")
 
 
 class CalendarToTradingDays(unittest.TestCase):

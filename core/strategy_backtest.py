@@ -192,14 +192,27 @@ def screener_backtest(raw=None, tickers=None) -> dict:
 
 # ── Part B: exit-engine replay ────────────────────────────────────────────────
 
+# THE production swing exit engine — single source of truth. E12 (2026-07-09)
+# made S1−0.5×ATR the primary stop and demoted 2.5×ATR to a fallback used only
+# when no tested S1 exists (that is what atr_mult=None means inside _simulate).
+# Import this rather than re-typing the dict: it was duplicated in three places,
+# and a copy drifting from production silently invalidates whatever it measures.
+PRODUCTION_EXIT_CFG = dict(use_s1=True, atr_mult=None, trail_at=0.30,
+                           trail_pct=0.15, stall=True, time_stop=None)
+
+# Keys are DESCRIPTIVE OF CONFIG, never of status. The entry below labelled
+# "pre-E12" was called "live" until 2026-08-26 — accurate when E11 ran, wrong from
+# E12 onward, so anyone reading run_all() output in between saw the stop rules the
+# swing book had already stopped using presented as current. Status words go stale;
+# config descriptions do not. Historical reports in data/*.json carry the old keys.
 EXIT_VARIANTS = {
-    "live (S1-0.5ATR, 2.5ATR floor, trail@30/15, stall)": dict(use_s1=True, atr_mult=2.5, trail_at=0.30, trail_pct=0.15, stall=True, time_stop=None),
-    "no S1 (pure 2.5xATR)":                                dict(use_s1=False, atr_mult=2.5, trail_at=0.30, trail_pct=0.15, stall=True, time_stop=None),
-    "tighter floor (2.0xATR)":                             dict(use_s1=True, atr_mult=2.0, trail_at=0.30, trail_pct=0.15, stall=True, time_stop=None),
-    "S1 only (no ATR floor)":                              dict(use_s1=True, atr_mult=None, trail_at=0.30, trail_pct=0.15, stall=True, time_stop=None),
-    "earlier trail (@15%, 10% trail)":                     dict(use_s1=True, atr_mult=2.5, trail_at=0.15, trail_pct=0.10, stall=True, time_stop=None),
-    "no stall exit":                                       dict(use_s1=True, atr_mult=2.5, trail_at=0.30, trail_pct=0.15, stall=False, time_stop=None),
-    "21d time stop":                                       dict(use_s1=True, atr_mult=2.5, trail_at=0.30, trail_pct=0.15, stall=True, time_stop=21),
+    "pre-E12 (S1-0.5ATR + 2.5ATR floor, trail@30/15, stall)": dict(use_s1=True, atr_mult=2.5, trail_at=0.30, trail_pct=0.15, stall=True, time_stop=None),
+    "no S1 (pure 2.5xATR)":                                    dict(use_s1=False, atr_mult=2.5, trail_at=0.30, trail_pct=0.15, stall=True, time_stop=None),
+    "tighter floor (2.0xATR)":                                 dict(use_s1=True, atr_mult=2.0, trail_at=0.30, trail_pct=0.15, stall=True, time_stop=None),
+    "S1 only (no ATR floor) [PRODUCTION since E12]":            dict(PRODUCTION_EXIT_CFG),
+    "earlier trail (@15%, 10% trail)":                          dict(use_s1=True, atr_mult=2.5, trail_at=0.15, trail_pct=0.10, stall=True, time_stop=None),
+    "no stall exit":                                            dict(use_s1=True, atr_mult=2.5, trail_at=0.30, trail_pct=0.15, stall=False, time_stop=None),
+    "21d time stop":                                            dict(use_s1=True, atr_mult=2.5, trail_at=0.30, trail_pct=0.15, stall=True, time_stop=21),
 }
 
 
@@ -349,12 +362,9 @@ def rr_predictiveness_backtest(raw=None, tickers=None, entries=None) -> dict:
     if raw is None or entries is None:
         _, entries, raw = screener_backtest()
 
-    # Current live SWING exit engine (E12): S1 - 0.5*ATR primary, 2.5*ATR only
-    # as the no-S1 fallback. NOTE the variant literally labelled "live" in
-    # EXIT_VARIANTS is the PRE-E12 config (it carries the 2.5*ATR floor) — using
-    # it here would simulate stops the swing book no longer uses.
-    cfg = dict(use_s1=True, atr_mult=None, trail_at=0.30, trail_pct=0.15,
-               stall=True, time_stop=None)
+    # The production swing exit engine (E12). Taken from the shared constant so
+    # this cannot drift from what the book actually does.
+    cfg = dict(PRODUCTION_EXIT_CFG)
 
     if len(entries) > MAX_ENTRIES_SIM:
         random.seed(11)

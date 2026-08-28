@@ -66,7 +66,8 @@ def run_vision_backtest(max_charts: int = MAX_CHARTS) -> None:
     from core.swing_chart_analysis import (_find_sr_levels, render_swing_chart,
                                            _run_vision_analysis, _calc_atr,
                                            LOOKBACK_DAYS)
-    from core.strategy_backtest import _simulate, _s1_support, EXIT_VARIANTS
+    from core.strategy_backtest import (_simulate, _s1_support, EXIT_VARIANTS,
+                                        PRODUCTION_EXIT_CFG)
 
     sample, raw = _sample_entries(max_charts)
     done = _done_keys()
@@ -77,9 +78,10 @@ def run_vision_backtest(max_charts: int = MAX_CHARTS) -> None:
         logger.warning(f"[VisionBT] cost guard: trimmed to {len(todo)} charts (~${COST_GUARD_USD})")
     logger.info(f"[VisionBT] {len(done)} done, {len(todo)} to analyze (~${len(todo)*EST_COST_PER_CHART:.2f})")
 
-    # E12 production exit config: S1-only primary, 2.5xATR fallback (see _simulate)
-    exit_cfg = dict(use_s1=True, atr_mult=None, trail_at=0.30, trail_pct=0.15,
-                    stall=True, time_stop=None)
+    # E12 production exit config: S1-only primary, 2.5xATR fallback (see _simulate).
+    # Shared constant, not a local copy — a drifted copy would silently grade
+    # vision against stops the book does not use.
+    exit_cfg = dict(PRODUCTION_EXIT_CFG)
 
     for n_done, (t, i, n_sig, date_str) in enumerate(todo, 1):
         # Pre-cost steps: safe to skip-and-continue on failure (no money spent yet)
